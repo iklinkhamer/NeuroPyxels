@@ -28,19 +28,19 @@ from tqdm.auto import tqdm
 import npyx.corr as corr
 import npyx.datasets as datasets
 from npyx.gl import get_units, load_units_qualities
-from npyx.spk_t import trn, trn_filtered
+from npyx.spk_t import trn, trn_filtered # IK change: old code: from npyx.spk_t import trn, trn_filtered   #Note: from spk_t_IK import trn, trn_filtered
 from npyx.spk_wvf import wvf_dsmatch
 
 ale = ast.literal_eval
 
-from .dataset_init import ArgsNamespace, download_file, extract_and_check
-from .misc import require_advanced_deps
-from .plots_functions import (
+from npyx.c4.dataset_init import ArgsNamespace, download_file, extract_and_check # IK change. Old code: from .dataset_init import ArgsNamespace, download_file, extract_and_check
+from npyx.c4.misc import require_advanced_deps  # IK change: Old code: from .misc import require_advanced_deps
+from npyx.c4.plots_functions import (           # IK change: Old code: from .plots_functions import (
     C4_COLORS,
     plot_features_1cell_vertical,
     plot_survival_confidence,
 )
-from .run_deep_classifier import (
+from npyx.c4.run_deep_classifier import (       # IK change: Old code: from .run_deep_classifier import (
     CustomDataset,
     encode_layer_info,
     ensemble_predict,
@@ -180,6 +180,8 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again)
         except (IndexError, pd.errors.EmptyDataError, ValueError):
             wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True)
+        if np.isnan(wvf).any():  # IK change: Added breakpoint
+            breakpoint()
         waveforms.append(datasets.preprocess_template(wvf, peak_sign=peak_sign))
 
         _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
@@ -188,6 +190,10 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
 
     if bad_units:
         print(f"Units {str(bad_units)[1:-1]} were skipped because they had too few good spikes.")
+        print(f"Total number of units: {len(units)}") # IK change. Added this line of code
+        print(f"Number of good units: {len(units) - len(bad_units)}") # IK change. Added this line of code
+        print(f"Number of bad units: {len(bad_units)}") # IK change. Added this line of code
+
     acgs_3d = np.array(acgs_3d)
     waveforms = np.array(waveforms)
 
@@ -311,6 +317,7 @@ def prepare_dataset_from_binary_parallel(
     num_cores = get_n_cores(len(units))
 
     with redirect_stdout_fd(open(os.devnull, "w")):
+        breakpoint()
         dataset_results = Parallel(n_jobs=num_cores, prefer="processes")(
             delayed(aux_prepare_dataset)(dp, u, again, fp_threshold, fn_threshold, peak_sign)
             for u in tqdm(units, desc="Preparing waveforms and ACGs for classification")
@@ -564,6 +571,7 @@ def run_cell_types_classifier(
             download_file(hessians_url, hessians_archive, description="Downloading hessians")
 
     # Prepare the data for prediction
+    #breakpoint()
     prediction_dataset, good_units = prepare_dataset(args)
 
     if args.use_layer:
@@ -592,7 +600,7 @@ def run_cell_types_classifier(
                 n_classes=6 if args.use_layer else 5,
                 use_layer=args.use_layer,
                 fast=False,
-                laplace=True,
+                laplace=True
             )
 
         # Serialize the ensemble for future use
@@ -645,7 +653,7 @@ def run_cell_types_classifier(
         index=False,
     )
     predictions_df[["cluster_id", "pred_probability"]].to_csv(
-        os.path.join(save_path, "cluster_pred_probability.tsv"), sep="\t", index=False
+        os.path.join(save_path, "clusater_pred_probbility.tsv"), sep="\t", index=False
     )
     predictions_df[["cluster_id", "confidence_ratio"]].to_csv(
         os.path.join(save_path, "cluster_confidence_ratio.tsv"), sep="\t", index=False
