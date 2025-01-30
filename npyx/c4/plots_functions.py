@@ -649,6 +649,12 @@ def plot_features_1cell_vertical(
     ticklab_s = 20
     log_ticks = [10, 1000]
 
+    xlims_acgs_rest = [-50, 50]
+    lin_ticks_rest = [50]
+
+    xlims_acgs_PkC_cs = [-2000, 2000]
+    lin_ticks_PkC_cs = [2000]
+
     if -1 in LABELMAP.keys():
         del LABELMAP[-1]
 
@@ -667,7 +673,7 @@ def plot_features_1cell_vertical(
         color = [c / 255 for c in C4_COLORS[ct]]
         ttl = (
             f"Cell {i if unit_id is None else unit_id} | Prediction: {ct}\n"
-            f"Confidence: \u03bc = {confidence:.2f}, \u0394\u03bc = {delta_conf:.2f}, ratio = {confidence_ratio:.2f}, votes = {n_votes}/{n_models}\n"
+            f"Confidence: \u03BC = {confidence:.2f}, \u0394\u03BC = {delta_conf:.2f}, ratio = {confidence_ratio:.2f}, votes = {n_votes}/{n_models}\n"
             f" {pred_str}"
         )
     else:
@@ -686,7 +692,7 @@ def plot_features_1cell_vertical(
             ct = LABELMAP[cti]
             color_ = [c / 255 for c in C4_COLORS[ct]]
             neuron_predictions = predictions[i, cti, :]
-            axx = fig.add_subplot(grid[cti * row_width : cti * row_width + row_width, -1])
+            axx = fig.add_subplot(grid[cti * row_width: cti * row_width + row_width, -1])
             npyx_plot.hist_MB(neuron_predictions, 0, 1, 0.05, ax=axx, color=color_, lw=2)
             mean_color = "k" if sum(color_) != 0 else "grey"
             axx.axvline(np.mean(neuron_predictions), color=mean_color, ls="--", lw=1.5)
@@ -708,37 +714,49 @@ def plot_features_1cell_vertical(
             )
 
     # ACG
+
+    try:
+        if ct == "PkC_cs":
+            xlims_acgs = xlims_acgs_PkC_cs
+            lin_ticks = lin_ticks_PkC_cs
+        else:
+            xlims_acgs = xlims_acgs_rest
+            lin_ticks = lin_ticks_rest
+    except:
+        xlims_acgs = xlims_acgs_rest
+        lin_ticks = lin_ticks_rest
+
     log_bins = np.logspace(np.log10(cbin), np.log10(cwin // 2), acg_3ds.shape[2] // 2)
     t_log = np.concatenate((-log_bins[::-1], [0], log_bins))
-    log_ticks = npa(log_ticks)
-    log_ticks = np.concatenate((-log_ticks[::-1], [0], log_ticks))
+    lin_ticks = npa(lin_ticks)
+    lin_ticks = np.concatenate((-lin_ticks[::-1], [0], lin_ticks))
 
     acg_3d = acg_3ds[i]
     ax0 = fig.add_subplot(grid[0:2, 0:2])
     ax0.plot(t_log, acg_3d.mean(0), color=color)
-    plt.xscale("symlog")
+    plt.xscale("linear")
     ax0.xaxis.set_ticklabels([])
     mplp(
         fig,
         ax0,
-        xticks=log_ticks,
+        xticks=lin_ticks,
         ticklab_s=ticklab_s,
         ylabel="Autocorr. (sp/s)",
-        xlim=[t_log[0], t_log[-1]],
+        xlim=[xlims_acgs[0], xlims_acgs[1]],
     )
 
     ax1 = fig.add_subplot(grid[2:, 0:2])
     vmax = np.max(acg_3d) * 1.1
     vmax = int(np.ceil(vmax / 10) * 10)
-    plt.xscale("symlog")
+    plt.xscale("linear")
     npyx_plot.imshow_cbar(
         acg_3d,
         ax=ax1,
         function="pcolor",
         xvalues=t_log,
         origin="bottom",
-        xticks=log_ticks,
-        xticklabels=log_ticks,
+        xticks=lin_ticks,
+        xticklabels=lin_ticks,
         cmapstr="viridis",
         vmin=0,
         vmax=vmax,
@@ -761,7 +779,7 @@ def plot_features_1cell_vertical(
         xscalebar=1,
         yscalebar=None,
         x_unit="ms",
-        y_unit="\u03bcV",
+        y_unit="\u03BCV",
         scalepad=0.025,
         fontsize=14,
         lw=3,
