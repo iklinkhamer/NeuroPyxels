@@ -650,6 +650,13 @@ def plot_features_1cell_vertical(
     ticklab_s = 20
     log_ticks = [10, 1000]
 
+    xlims_acgs_rest = [-50, 50]
+    lin_ticks_rest = [50]
+
+    xlims_acgs_PkC_cs = [-2000, 2000]
+    lin_ticks_PkC_cs = [2000]
+
+
     if -1 in LABELMAP.keys():
         del LABELMAP[-1]
 
@@ -675,6 +682,7 @@ def plot_features_1cell_vertical(
         color = "k"
         ttl = f"Cell {i if unit_id is None else unit_id}"
         n_classes = 5
+
 
     fig = plt.figure()
     n_rows = len(LABELMAP)
@@ -709,37 +717,50 @@ def plot_features_1cell_vertical(
             )
 
     # ACG
+
+    try:
+        if ct=="PkC_cs":
+            xlims_acgs = xlims_acgs_PkC_cs
+            lin_ticks = lin_ticks_PkC_cs
+        else:
+            xlims_acgs = xlims_acgs_rest
+            lin_ticks = lin_ticks_rest
+    except:
+        xlims_acgs = xlims_acgs_rest
+        lin_ticks = lin_ticks_rest
+
+
     log_bins = np.logspace(np.log10(cbin), np.log10(cwin // 2), acg_3ds.shape[2] // 2)
     t_log = np.concatenate((-log_bins[::-1], [0], log_bins))
-    log_ticks = npa(log_ticks)
-    log_ticks = np.concatenate((-log_ticks[::-1], [0], log_ticks))
+    lin_ticks = npa(lin_ticks)
+    lin_ticks = np.concatenate((-lin_ticks[::-1], [0], lin_ticks))
 
     acg_3d = acg_3ds[i]
     ax0 = fig.add_subplot(grid[0:2, 0:2])
     ax0.plot(t_log, acg_3d.mean(0), color=color)
-    plt.xscale("symlog")
+    plt.xscale("linear")
     ax0.xaxis.set_ticklabels([])
     mplp(
         fig,
         ax0,
-        xticks=log_ticks,
+        xticks=lin_ticks,
         ticklab_s=ticklab_s,
         ylabel="Autocorr. (sp/s)",
-        xlim=[t_log[0], t_log[-1]],
+        xlim=[xlims_acgs[0], xlims_acgs[1]],
     )
 
     ax1 = fig.add_subplot(grid[2:, 0:2])
     vmax = np.max(acg_3d) * 1.1
     vmax = int(np.ceil(vmax / 10) * 10)
-    plt.xscale("symlog")
+    plt.xscale("linear")
     npyx_plot.imshow_cbar(
         acg_3d,
         ax=ax1,
         function="pcolor",
         xvalues=t_log,
         origin="bottom",
-        xticks=log_ticks,
-        xticklabels=log_ticks,
+        xticks=lin_ticks,
+        xticklabels=lin_ticks,
         cmapstr="viridis",
         vmin=0,
         vmax=vmax,
