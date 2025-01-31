@@ -652,8 +652,8 @@ def plot_features_1cell_vertical(
     xlims_acgs_rest = [-50, 50]
     lin_ticks_rest = [50]
 
-    xlims_acgs_PkC_cs = [-2000, 2000]
-    lin_ticks_PkC_cs = [2000]
+    xlims_acgs_PkC_cs = [-1000, 1000]
+    lin_ticks_PkC_cs = [1000]
 
     if -1 in LABELMAP.keys():
         del LABELMAP[-1]
@@ -685,6 +685,17 @@ def plot_features_1cell_vertical(
     n_rows = len(LABELMAP)
     grid = plt.GridSpec(n_rows, 6, wspace=0.1, hspace=0.8)
 
+    try:
+        if ct == "PkC_cs":
+            xlims_acgs = xlims_acgs_PkC_cs
+            lin_ticks = lin_ticks_PkC_cs
+        else:
+            xlims_acgs = xlims_acgs_rest
+            lin_ticks = lin_ticks_rest
+    except:
+        xlims_acgs = xlims_acgs_rest
+        lin_ticks = lin_ticks_rest
+
     # confidence
     if predictions is not None:
         row_width = n_rows // n_classes
@@ -714,18 +725,6 @@ def plot_features_1cell_vertical(
             )
 
     # ACG
-
-    try:
-        if ct == "PkC_cs":
-            xlims_acgs = xlims_acgs_PkC_cs
-            lin_ticks = lin_ticks_PkC_cs
-        else:
-            xlims_acgs = xlims_acgs_rest
-            lin_ticks = lin_ticks_rest
-    except:
-        xlims_acgs = xlims_acgs_rest
-        lin_ticks = lin_ticks_rest
-
     log_bins = np.logspace(np.log10(cbin), np.log10(cwin // 2), acg_3ds.shape[2] // 2)
     t_log = np.concatenate((-log_bins[::-1], [0], log_bins))
     lin_ticks = npa(lin_ticks)
@@ -763,7 +762,7 @@ def plot_features_1cell_vertical(
         cticks=[0, vmax],
     )
 
-    mplp(fig, ax1, ticklab_s=ticklab_s, xlabel="Time (ms)", ytickslabels=[""] * 5)
+    mplp(fig, ax1, ticklab_s=ticklab_s, xlabel="Time (ms)", ytickslabels=[""] * 5, xlim=[xlims_acgs[0], xlims_acgs[1]], xticks=lin_ticks)
 
     # WVF
     n_samples = waveforms.shape[1]
