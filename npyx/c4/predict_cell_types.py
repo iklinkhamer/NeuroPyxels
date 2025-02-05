@@ -653,7 +653,7 @@ def run_cell_types_classifier(
         index=False,
     )
     predictions_df[["cluster_id", "pred_probability"]].to_csv(
-        os.path.join(save_path, "clusater_pred_probbility.tsv"), sep="\t", index=False
+        os.path.join(save_path, "cluster_pred_probability.tsv"), sep="\t", index=False
     )
     predictions_df[["cluster_id", "confidence_ratio"]].to_csv(
         os.path.join(save_path, "cluster_confidence_ratio.tsv"), sep="\t", index=False
