@@ -649,7 +649,7 @@ def plot_features_1cell_vertical(
     ticklab_s = 20
     log_ticks = [10, 1000]
 
-    xlims_acgs_rest = [-50, 50]
+    xlims_acgs_rest = [-50, 50]	#IK change added these for linear plotting.
     lin_ticks_rest = [50]
 
     xlims_acgs_PkC_cs = [-1000, 1000]
@@ -685,7 +685,7 @@ def plot_features_1cell_vertical(
     n_rows = len(LABELMAP)
     grid = plt.GridSpec(n_rows, 6, wspace=0.1, hspace=0.8)
 
-    try:
+    try:	#IK change: added this for linear plotting.
         if ct == "PkC_cs":
             xlims_acgs = xlims_acgs_PkC_cs
             lin_ticks = lin_ticks_PkC_cs
@@ -733,7 +733,7 @@ def plot_features_1cell_vertical(
     acg_3d = acg_3ds[i]
     ax0 = fig.add_subplot(grid[0:2, 0:2])
     ax0.plot(t_log, acg_3d.mean(0), color=color)
-    plt.xscale("linear")
+    plt.xscale("linear") #IK change from symlog
     ax0.xaxis.set_ticklabels([])
     mplp(
         fig,
@@ -747,7 +747,7 @@ def plot_features_1cell_vertical(
     ax1 = fig.add_subplot(grid[2:, 0:2])
     vmax = np.max(acg_3d) * 1.1
     vmax = int(np.ceil(vmax / 10) * 10)
-    plt.xscale("linear")
+    plt.xscale("linear")	#IK change from symlog
     npyx_plot.imshow_cbar(
         acg_3d,
         ax=ax1,
@@ -762,7 +762,7 @@ def plot_features_1cell_vertical(
         cticks=[0, vmax],
     )
 
-    mplp(fig, ax1, ticklab_s=ticklab_s, xlabel="Time (ms)", ytickslabels=[""] * 5, xlim=[xlims_acgs[0], xlims_acgs[1]], xticks=lin_ticks)
+    mplp(fig, ax1, ticklab_s=ticklab_s, xlabel="Time (ms)", ytickslabels=[""] * 5, xlim=[xlims_acgs[0], xlims_acgs[1]], xticks=lin_ticks)	#IK change. added the xticks and xlim for linear plotting. Otherwise the plot looked wrong.
 
     # WVF
     n_samples = waveforms.shape[1]
@@ -794,6 +794,7 @@ def plot_features_1cell_vertical(
     if saveDir is not None:
         fig_name = f"cell {i}" if fig_name is None else fig_name
         npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "pdf")
+        npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "eps") #IK change: added eps save.
 
     if not plot:
         plt.close(fig)
