@@ -377,9 +377,10 @@ def load_units_qualities(dp, again=False):
     try:
         if (dp / f).exists():
             qualities = pd.read_csv(dp / f, sep='\s+')
-            # Check if the second column header is "KSLabel" before renaming	#IK change: added
-            if df.columns[1] == "KSLabel":	# IK change: added this code 11-02-2025
-                df.rename(columns={"KSLabel": "group"}, inplace=True)	# IK change: added
+	    # Check if the second column header is "KSLabel" before renaming	#IK change: added
+            if qualities.columns[1] == "KSLabel":	# IK change: added this code 11-02-2025
+                qualities.rename(columns={"KSLabel": "group"}, inplace=True)	# IK change: added
+                qualities.to_csv(dp / f, index=False, sep='\t') # IK change: added
             re_spikesorted = detect_new_spikesorting(dp)
             regenerate = True if (again or re_spikesorted) else False
             assert (

@@ -181,7 +181,9 @@ def trn(dp, unit, sav=True, verbose=False,
 
         # Filter out spike duplicates (spikes following an ISI shorter than enforced_rp)
         # by default, only pure duplicates (yeah they happen!!)
-        assert len(train)!=0, f'unit {unit} not found in spike_clusters.npy - probably a merger bug.'
+        if len(train) == 0: # IK change
+            print(f"Warning: Unit {unit} not found in spike_clusters.npy - probably a merger bug.") # IK change
+            return []  # Return an empty list instead of crashing   # IK change
         duplicates_m = duplicates_mask(train, enforced_rp, fs)
         train = train[~duplicates_m]
         # DEPRECATED now caching with cachecache
