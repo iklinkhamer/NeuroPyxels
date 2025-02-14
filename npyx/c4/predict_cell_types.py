@@ -140,6 +140,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     waveforms = []
     acgs_3d = []
     bad_units = []
+    all_waveforms_IK = [] #IK change: added this line
     for u in tqdm(
         units,
         desc="Preparing waveforms and ACGs for classification",
@@ -177,12 +178,13 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             continue
 
         try:
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again)
+            wvf, _, _, _, wvf_IK = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True)
+            wvf, _, _, _, wvf_IK = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
         if np.isnan(wvf).any():  # IK change: Added breakpoint
             breakpoint()
         waveforms.append(datasets.preprocess_template(wvf, peak_sign=peak_sign))
+        all_waveforms_IK.append(datasets.preprocess_template(wvf_IK,peak_sign=peak_sign)) #IK change: added this line
 
         _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
         acg, _ = corr.convert_acg_log(acg, 1, 2000)
@@ -200,7 +202,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     if len(acgs_3d) == 0:
         raise ValueError("No units were found with the provided parameter choices after quality checks.")
 
-    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units
+    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units, all_waveforms_IK #IK change: added wvf_IK
 
 
 def get_layer_information(args, good_units):
@@ -371,13 +373,13 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
         else:
-            prediction_dataset, bad_units = prepare_dataset_from_binary(
+            prediction_dataset, bad_units, wvf_IK = prepare_dataset_from_binary(  #IK change: added wvf_IK
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
 
-    return prediction_dataset, good_units
+    return prediction_dataset, good_units, wvf_IK #IK change: added wvf_IK
 
 
 def format_predictions(predictions_matrix: np.ndarray) -> tuple:
@@ -572,7 +574,7 @@ def run_cell_types_classifier(
 
     # Prepare the data for prediction
     #breakpoint()
-    prediction_dataset, good_units = prepare_dataset(args)
+    prediction_dataset, good_units, wvf_IK = prepare_dataset(args) #IK change: added wvf_IK
 
     if args.use_layer:
         one_hot_layer, args = get_layer_information(args, good_units)
@@ -685,6 +687,7 @@ def run_cell_types_classifier(
                 i,
                 prediction_dataset[:, :2010].reshape(-1, 10, 201) * 100,
                 prediction_dataset[:, 2010:],
+                wvf_IK, #IK change: added wvf_IK
                 predictions=raw_probabilities,
                 saveDir=plots_folder,
                 fig_name=f"unit_{unit}_cell_type_predictions",

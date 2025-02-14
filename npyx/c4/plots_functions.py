@@ -633,6 +633,7 @@ def plot_features_1cell_vertical(
     i,
     acg_3ds,
     waveforms,
+    wvf_IK, #IK change: added wvf_IK
     predictions=None,
     saveDir=None,
     fig_name=None,
@@ -769,7 +770,23 @@ def plot_features_1cell_vertical(
     t = np.arange(n_samples) / (fs / 1000)
 
     ax2 = fig.add_subplot(grid[1:4, 2:5])
-    ax2.plot(t, waveforms[i], color=color)
+    shadow_waveforms = wvf_IK[i] #IK change: added this code and the next few to plot the non-average/raw waveforms
+    # Compute min and max waveforms at each time point
+    wave_min = np.min(shadow_waveforms, axis=0)
+    wave_max = np.max(shadow_waveforms, axis=0)
+
+    factor_lightest = 0.1
+    lightest_color = tuple((c + (255 - c) * factor_lightest) / 255 for c in color)  # Normalize to 0-1
+    # Shade the region between min and max waveforms
+    ax2.fill_between(t, wave_min, wave_max, color=lighter_color, alpha=0.3, label="Shaded region")
+
+
+    factor = 0.2
+    lighter_color = tuple((c + (255 - c) * factor) / 255 for c in color)  # Normalize to 0-1
+    for e in range(len(shadow_waveforms)):
+        ax2.plot(t, shadow_waveforms[e], color=lighter_color)
+    ax2.plot(t, waveforms[i], color=color, linewidth=5)
+
 
     # add scalebar
     # conveniently, the axis are already in ms and microvolts

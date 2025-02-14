@@ -505,11 +505,15 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
     drift_shift_matched_mean = np.median(drift_shift_matched_batches, axis=0)
     drift_shift_matched_mean_peak = drift_shift_matched_mean[:,peak_channel]
 
+    drift_shift_matched_peak = drift_shift_matched_batches[:,:,peak_channel] # IK change: added this line for plotting the errorbars.
+
     # recenter spike absolute maximum
     if do_shift_match:
         shift = (np.argmax(np.abs(drift_shift_matched_mean_peak)) - drift_shift_matched_mean_peak.shape[0]//2)%drift_shift_matched_mean_peak.shape[0]
         drift_shift_matched_mean = np.concatenate([drift_shift_matched_mean[shift:], drift_shift_matched_mean[:shift]], axis=0)
         drift_shift_matched_mean_peak = np.concatenate([drift_shift_matched_mean_peak[shift:], drift_shift_matched_mean_peak[:shift]], axis=0)
+
+        drift_shift_matched_peak = np.concatenate([drift_shift_matched_peak[shift:], drift_shift_matched_peak[:shift]], axis=0) # IK change
 
     # DEPRECATED - now caching with cachecache
     # if save:
@@ -527,7 +531,7 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
         fig = quickplot_n_waves(drift_shift_matched_mean, 'raw:black\ndrift-matched:green\ndrift-shift-matched:red', peak_channel, fig=fig, color='red')
         #breakpoint()
 
-    return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel
+    return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel, drift_shift_matched_peak # IK change
 
 def shift_match(waves, alignment_channel,
                 chan_range=2, recenter_spikes=False,
@@ -977,6 +981,55 @@ def _excerpt_step(n_samples, n_excerpts=None, excerpt_size=None):
     step = max((n_samples - excerpt_size) // (n_excerpts - 1),
                excerpt_size)
     return step
+
+
+import numpy as np  #IK change: added
+import matplotlib.pyplot as plt #IK change: added
+
+def plot_random_waveforms(spike_waveforms, num_samples=100): #IK change: added
+    """
+    Plots a random selection of spike waveforms from the provided dataset in individual subplots.
+
+    Parameters:
+    - spike_waveforms: numpy array of shape (num_neurons, num_timepoints, num_channels)
+    - num_samples: Number of waveforms to randomly select and plot
+    """
+    if spike_waveforms.size == 0:
+        print("No waveforms available.")
+        return
+
+    # Print original shape
+    print(f"Original shape of spike_waveforms: {spike_waveforms.shape}")
+
+    # Use only the first channel
+    single_channel_waveforms = spike_waveforms[..., 0]  # Shape: (num_neurons, num_timepoints)
+
+    # Flatten across neurons: (num_neurons, num_timepoints) → (num_neurons * num_timepoints, timepoints)
+    reshaped_waveforms = single_channel_waveforms.reshape(-1, single_channel_waveforms.shape[-1])
+
+    num_available = reshaped_waveforms.shape[0]
+    num_samples = min(num_samples, num_available)  # Avoid oversampling
+
+    # Randomly sample waveforms
+    random_indices = np.random.choice(num_available, num_samples, replace=False)
+    selected_waveforms = reshaped_waveforms[random_indices]
+
+    # Set up subplots (10x10 grid)
+    fig, axes = plt.subplots(10, 10, figsize=(15, 15))
+    fig.suptitle("Randomly Selected Spike Waveforms", fontsize=16)
+
+    for i, ax in enumerate(axes.flatten()):
+        if i < num_samples:
+            ax.plot(selected_waveforms[i], alpha=0.6)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        else:
+            ax.axis("off")  # Hide extra subplots
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.95)  # Adjust title positioning
+    plt.show(block=True)
+
 
 # Recurrent imports
 from npyx.merger import assert_multi, get_ds_ids, get_source_dp_u
