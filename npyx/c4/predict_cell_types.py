@@ -182,8 +182,13 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         except (IndexError, pd.errors.EmptyDataError, ValueError):
             wvf, _, _, _, wvf_IK = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
         if np.isnan(wvf).any():  # IK change: Added breakpoint
-            breakpoint()
-        waveforms.append(datasets.preprocess_template(wvf, peak_sign=peak_sign))
+            bad_units.append(u) # IK change added
+            continue # IK change added
+        try: # IK change: added
+            waveforms.append(datasets.preprocess_template(wvf, peak_sign=peak_sign))
+        except: # IK change : added
+            bad_units.append(u) # IK change added
+            continue # IK change added
         all_waveforms_IK.append(datasets.preprocess_template(wvf_IK,peak_sign=peak_sign)) #IK change: added this line
 
         _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
