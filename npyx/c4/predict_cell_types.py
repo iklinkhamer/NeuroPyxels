@@ -29,7 +29,7 @@ import npyx.corr as corr
 import npyx.datasets as datasets
 from npyx.gl import get_units, load_units_qualities
 from npyx.spk_t import trn, trn_filtered # IK change: old code: from npyx.spk_t import trn, trn_filtered   #Note: from spk_t_IK import trn, trn_filtered
-from npyx.spk_wvf import wvf_dsmatch
+from npyx.spk_wvf import wvf_dsmatch, wvf_dsmatch_for_plotting_ik   #IK change: old code: from npyx.spk_wvf import wvf_dsmatch
 
 ale = ast.literal_eval
 
@@ -122,6 +122,7 @@ def directory_checks(data_path):
     ), "Make sure that the current working directory contains the output of a spike sorter compatible with phy (in particular the params.py file)."
     if os.path.exists(os.path.join(data_path, "cluster_predicted_cell_type.tsv")):
         while True:
+            break # IK change: added this to ignore the prompt.
             prompt = input(
                 "\nA cluster_predicted_cell_type.tsv file already exists. Are you sure you want to overwrite previous results? If you wish to compare different classifier parameters move the previous results to a different folder before running. (y/n) : "
             )
@@ -140,7 +141,8 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     waveforms = []
     acgs_3d = []
     bad_units = []
-    all_waveforms_IK = [] #IK change: added this line
+    all_wvf_longer = [] #IK change: added this line
+    all_wvfs_longer = [] #IK change: added this line
     for u in tqdm(
         units,
         desc="Preparing waveforms and ACGs for classification",
@@ -178,18 +180,23 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             continue
 
         try:
-            wvf, _, _, _, wvf_IK = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False)
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf, _, _, _, wvf_IK = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False) 
         if np.isnan(wvf).any():  # IK change: Added breakpoint
-            bad_units.append(u) # IK change added
-            continue # IK change added
+            bad_units.append(u)  # IK change added
+            continue  # IK change added
         try: # IK change: added
             waveforms.append(datasets.preprocess_template(wvf, peak_sign=peak_sign))
         except: # IK change : added
             bad_units.append(u) # IK change added
             continue # IK change added
-        all_waveforms_IK.append(datasets.preprocess_template(wvf_IK,peak_sign=peak_sign)) #IK change: added this line
+        try:
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=again, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+        except (IndexError, pd.errors.EmptyDataError, ValueError):
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+        all_wvf_longer.append(datasets.preprocess_template(wvf_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
+        all_wvfs_longer.append(datasets.preprocess_template(wvfs_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
 
         _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
         acg, _ = corr.convert_acg_log(acg, 1, 2000)
@@ -207,7 +214,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     if len(acgs_3d) == 0:
         raise ValueError("No units were found with the provided parameter choices after quality checks.")
 
-    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units, all_waveforms_IK #IK change: added wvf_IK
+    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units, all_wvf_longer, all_wvfs_longer #IK change: added wvf_IK
 
 
 def get_layer_information(args, good_units):
@@ -378,13 +385,13 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
         else:
-            prediction_dataset, bad_units, wvf_IK = prepare_dataset_from_binary(  #IK change: added wvf_IK
+            prediction_dataset, bad_units, wvf_longer, wvfs_longer = prepare_dataset_from_binary(  #IK change: added wvf_IK
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
 
-    return prediction_dataset, good_units, wvf_IK #IK change: added wvf_IK
+    return prediction_dataset, good_units, wvf_longer, wvfs_longer #IK change: added wvf_IK
 
 
 def format_predictions(predictions_matrix: np.ndarray) -> tuple:
@@ -487,6 +494,7 @@ def run_cell_types_classifier(
     fp_threshold: float = 0.05,
     fn_threshold: float = 0.05,
     waveform_peak_sign: str = "negative",
+    save_path: str = ".", #IK change: added
 ) -> None:
     """
     Predicts the cell types of units in a given dataset using a pre-trained ensemble of classifiers.
@@ -516,6 +524,7 @@ def run_cell_types_classifier(
         fp_threshold=fp_threshold,
         fn_threshold=fn_threshold,
         peak_sign=waveform_peak_sign,
+        save_path=save_path, #IK change: added
     )
 
     assert args.quality in [
@@ -579,7 +588,7 @@ def run_cell_types_classifier(
 
     # Prepare the data for prediction
     #breakpoint()
-    prediction_dataset, good_units, wvf_IK = prepare_dataset(args) #IK change: added wvf_IK
+    prediction_dataset, good_units, wvf_longer, wvfs_longer = prepare_dataset(args) #IK change: added wvf_IK
 
     if args.use_layer:
         one_hot_layer, args = get_layer_information(args, good_units)
@@ -651,7 +660,7 @@ def run_cell_types_classifier(
         if not os.path.exists(save_path):
             os.makedirs(save_path)
     else:
-        save_path = args.data_path
+        save_path = args.save_path #IK change #args.data_path
 
     # Save the predictions to a file that can be read by phy
     predictions_df[["cluster_id", "predicted_cell_type"]].to_csv(
@@ -691,8 +700,8 @@ def run_cell_types_classifier(
             plot_features_1cell_vertical(
                 i,
                 prediction_dataset[:, :2010].reshape(-1, 10, 201) * 100,
-                prediction_dataset[:, 2010:],
-                wvf_IK, #IK change: added wvf_IK
+                np.array(wvf_longer), # IK change . previous: #prediction_dataset[:, 2010:],
+                wvfs_longer, #IK change: added wvf_IK
                 predictions=raw_probabilities,
                 saveDir=plots_folder,
                 fig_name=f"unit_{unit}_cell_type_predictions",
