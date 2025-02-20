@@ -775,18 +775,18 @@ def plot_features_1cell_vertical(
     wave_min = np.min(shadow_waveforms, axis=0)
     wave_max = np.max(shadow_waveforms, axis=0)
 
-    factor_lightest = 0.1
-    lightest_color = tuple((c + (255 - c) * factor_lightest) / 255 for c in color)  # Normalize to 0-1
+    factor = 0.4
+    lighter_color = tuple(c + (1 - c) * factor for c in color)  # Keep in 0-1 range
+
+    factor_lightest = 0.8
+    lightest_color = tuple(c + (1 - c) * factor_lightest for c in color)  # Keep in 0-1 range
+
     # Shade the region between min and max waveforms
-    ax2.fill_between(t, wave_min, wave_max, color=lighter_color, alpha=0.3, label="Shaded region")
+    ax2.fill_between(t, wave_min, wave_max, color=lightest_color, label="Shaded region")
 
-
-    factor = 0.2
-    lighter_color = tuple((c + (255 - c) * factor) / 255 for c in color)  # Normalize to 0-1
     for e in range(len(shadow_waveforms)):
         ax2.plot(t, shadow_waveforms[e], color=lighter_color)
     ax2.plot(t, waveforms[i], color=color, linewidth=5)
-
 
     # add scalebar
     # conveniently, the axis are already in ms and microvolts
