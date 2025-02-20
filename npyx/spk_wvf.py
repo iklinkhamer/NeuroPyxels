@@ -505,7 +505,6 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
     drift_shift_matched_mean = np.median(drift_shift_matched_batches, axis=0)
     drift_shift_matched_mean_peak = drift_shift_matched_mean[:,peak_channel]
 
-    drift_shift_matched_peak = drift_shift_matched_batches[:,:,peak_channel] # IK change: added this line for plotting the errorbars.
 
     # recenter spike absolute maximum
     if do_shift_match:
@@ -513,7 +512,6 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
         drift_shift_matched_mean = np.concatenate([drift_shift_matched_mean[shift:], drift_shift_matched_mean[:shift]], axis=0)
         drift_shift_matched_mean_peak = np.concatenate([drift_shift_matched_mean_peak[shift:], drift_shift_matched_mean_peak[:shift]], axis=0)
 
-        drift_shift_matched_peak = np.concatenate([drift_shift_matched_peak[shift:], drift_shift_matched_peak[:shift]], axis=0) # IK change
 
     # DEPRECATED - now caching with cachecache
     # if save:
@@ -531,7 +529,175 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
         fig = quickplot_n_waves(drift_shift_matched_mean, 'raw:black\ndrift-matched:green\ndrift-shift-matched:red', peak_channel, fig=fig, color='red')
         #breakpoint()
 
-    return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel, drift_shift_matched_peak # IK change
+    return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel
+
+@npyx_cacher
+def wvf_dsmatch_for_plotting_ik(dp, u, n_waveforms=100, t_waveforms=240, periods='all', # IK change: added this whole function for plotting
+                wvf_batch_size=10, ignore_nwvf=True, med_sub=False, spike_ids=None,
+                save=False, verbose=False, again=False,
+                whiten=False, hpfilt=False, hpfiltf=300, nRangeWhiten=None, nRangeMedSub=None,
+                n_waves_used_for_matching=5000, peakchan_allowed_range=6,
+                use_average_peakchan=False, max_allowed_amplitude=3000, max_allowed_shift=3,
+                n_waves_to_average=800, plot_debug=False, do_shift_match=True, n_waveforms_per_batch=10,
+                subselect_max_template=False, amp_max_percentile=0.95,
+                cache_results=True, cache_path=None):
+
+    """
+        Returns the slightly longer waveforms and multiple error waveforms for plotting purposes
+    """
+
+    dp = Path(dp)
+
+    if spike_ids is not None:
+        raise ValueError('No support yet for passing multiple spike indices. Exiting.')
+
+    ## Extract spike ids so we can extract consecutive waveforms
+    spike_ids_all = ids(dp, u, periods=periods, again=again, cache_results=cache_results, cache_path=cache_path)
+    # make sure to only select waveforms from 1 cluster if there was a merge
+    # (arbitrary decision: the cluster with the largest amount of spikes)
+    if subselect_max_template:
+        spike_templates = np.load(Path(dp, 'spike_templates.npy')).squeeze()[spike_ids_all]
+        template_ids, template_ns = np.unique(spike_templates, return_counts=True)
+        template_to_use = template_ids[np.argmax(template_ns)]
+        spike_ids_all = spike_ids_all[spike_templates == template_to_use]
+        if verbose: print(
+            (f"Used 1/{len(template_ids)} templates (had {template_ns[template_ids == template_to_use]} spikes, "
+             f"others {template_ns[template_ids != template_to_use]} respectively."))
+    # group in batches
+    if n_waveforms_per_batch > 1:
+        spike_ids_split_all = split(spike_ids_all, n_waveforms_per_batch, return_last=False).astype(np.int64)
+    elif n_waveforms_per_batch == 1:
+        spike_ids_split_all = spike_ids_all
+    else:
+        raise ValueError("n_waveforms_per_batch must be >=1!")
+
+    ## Subsample waveforms based on available RAM
+    vmem = dict(psutil.virtual_memory()._asdict())
+    available_RAM = vmem['available']
+    single_w_size = wvf(dp, None, t_waveforms=t_waveforms, spike_ids=[0],
+                        cache_results=cache_results, cache_path=cache_path).nbytes
+    max_n_waveforms = available_RAM // single_w_size - 100  # -100 to be safe
+    n_waves_used_for_matching = min(n_waves_used_for_matching, max_n_waveforms)
+    if n_waves_used_for_matching < 1000 and verbose:
+        print(f"WARNING using less than 1000 waveforms for drift matching. This can lead to noisy output.")
+
+    # now subsample ids based on the RAM-safe n_waves_used_for_matching
+    if n_waves_used_for_matching < len(spike_ids_all):
+        n_batches_used_for_matching = n_waves_used_for_matching // n_waveforms_per_batch  # floor division
+        spike_ids_subsample = np.round(
+            np.linspace(0, spike_ids_split_all.shape[0] - 1, n_batches_used_for_matching)).astype(int)
+        spike_ids_split = spike_ids_split_all[spike_ids_subsample]
+    else:
+        spike_ids_split = spike_ids_split_all
+    # spike_ids_split_indices = np.arange(0,spike_ids_split.shape[0],1)
+
+    ## Extract the waveforms using the wvf function in blocks of 10 (n_waveforms_per_batch).
+    # After waves have been extracted, put the index of the channel with the
+    # max amplitude as well as the max amplitude into the peak_chan_split array
+    spike_ids_split = spike_ids_split.flatten()
+    raw_waves, corrupt_mask = wvf(dp, u=None,
+                                  n_waveforms=n_waveforms, t_waveforms=t_waveforms,
+                                  selection='regular', periods=periods, spike_ids=spike_ids_split,
+                                  wvf_batch_size=wvf_batch_size, ignore_nwvf=ignore_nwvf,
+                                  save=save, verbose=verbose, again=True,
+                                  whiten=whiten, med_sub=med_sub,
+                                  hpfilt=hpfilt, hpfiltf=hpfiltf, nRangeWhiten=nRangeWhiten,
+                                  nRangeMedSub=nRangeMedSub, ignore_ks_chanfilt=True,
+                                  return_corrupt_mask=True,
+                                  cache_results=cache_results, cache_path=cache_path)
+
+    # Remove waveforms and spike_ids of batches with corrupt waveforms
+    spike_ids_split = spike_ids_split.reshape(-1, n_waveforms_per_batch)
+    if np.any(corrupt_mask):
+        reshaped_corrupt_mask = corrupt_mask.reshape(-1, n_waveforms_per_batch).copy()
+        reshaped_corrupt_mask[np.any(reshaped_corrupt_mask,
+                                     axis=1)] = True  # if any of the waveforms in a batch is corrupt, mark the batch as corrupt
+        corrupt_mask = reshaped_corrupt_mask.ravel()[~corrupt_mask]  # match size of raw_waveforms
+        raw_waves = raw_waves[~corrupt_mask]
+
+        corrupt_batches_mask = np.any(reshaped_corrupt_mask, axis=1)
+        spike_ids_split = spike_ids_split[~corrupt_batches_mask]
+
+    # Compute mean waveforms, batch-wise
+    raw_waves = raw_waves.reshape(spike_ids_split.shape[0], n_waveforms_per_batch, t_waveforms, -1)
+    mean_waves = np.mean(raw_waves, axis=1)
+
+    ## Find peak channel (and store amplitude) of every batch
+    # only consider amplitudes on channels around original peak channel
+    original_peak_chan = get_peak_chan(dp, u, again=again,
+                                       cache_results=cache_results, cache_path=cache_path)
+    c_left, c_right = max(0, original_peak_chan - peakchan_allowed_range), min(
+        original_peak_chan + peakchan_allowed_range, mean_waves.shape[2])
+    # calculate amplitudes ("peak-to-peak"), but ONLY using 2ms (-30,30) in the middle
+    amp_t_span = 20  # samples
+    t1, t2 = max(0, mean_waves.shape[1] // 2 - amp_t_span), min(mean_waves.shape[1] // 2 + amp_t_span,
+                                                                mean_waves.shape[1])
+    amplitudes = np.ptp(mean_waves[:, t1:t2, c_left:c_right], axis=1)
+
+    spike_ids_split_indices = np.arange(0, spike_ids_split.shape[0], 1)
+    batch_peak_channels = np.zeros(shape=(spike_ids_split_indices.shape[0], 3))
+    batch_peak_channels[:, 0] = spike_ids_split_indices  # store batch indices (batch = averaged 10 spikes)
+    batch_peak_channels[:, 1] = c_left + np.argmax(amplitudes, axis=1)  # store peak channel of each batch
+    batch_peak_channels[:, 2] = np.max(amplitudes, axis=1)  # store peak channel amplitude
+
+    # Filter out batches with too large amplitude (probably artefactual)
+    batch_peak_channels = batch_peak_channels[batch_peak_channels[:, 2] < max_allowed_amplitude]
+
+    #### Z-drift matching ####
+    # subselect batches with same peak channel
+    if use_average_peakchan:
+        peak_channel = int(original_peak_chan)
+    else:
+        # use mode of peak channel distribution across spikes
+        chans, count = np.unique(batch_peak_channels[:, 1], return_counts=True)
+        peak_channel = int(chans[np.argmax(count)])
+
+
+    batch_peak_channels = batch_peak_channels[batch_peak_channels[:, 1] == peak_channel]
+
+    n_driftmatched_subset = n_waves_to_average // n_waveforms_per_batch
+    batch_peak_channels = batch_peak_channels[np.argsort(batch_peak_channels[:, 2])]  # sort by amplitude
+
+    prct_i = int(batch_peak_channels.shape[0] * amp_max_percentile)
+    if prct_i < n_driftmatched_subset:
+        batch_peak_channels = batch_peak_channels[0:n_driftmatched_subset]
+    else:
+        i_left = max(prct_i - n_driftmatched_subset, 0)  # should never be negative given if statement, but precaution
+        batch_peak_channels = batch_peak_channels[i_left:prct_i]
+    drift_matched_spike_ids = np.sort(batch_peak_channels[:, 0])
+
+    #### shift matching ####
+    # extract drift-matched raw waveforms
+    dsmatch_batch_ids = batch_peak_channels[:, 0].astype(np.int64)
+    drift_matched_waves = raw_waves[dsmatch_batch_ids]  # .reshape(-1, t_waveforms, raw_waves.shape[-1])
+    drift_matched_batches = np.mean(drift_matched_waves, axis=1)
+
+    # shift waves using simple negative peak matching
+    recenter_spikes = False
+    if do_shift_match:
+        drift_shift_matched_batches = shift_match(drift_matched_batches, peak_channel, max_allowed_shift,
+                                                  recenter_spikes, plot_debug)
+    else:
+        drift_shift_matched_batches = drift_matched_batches
+    # Get the median of the drift and shift matched waves (not sensitive to outliers)
+    drift_shift_matched_mean = np.median(drift_shift_matched_batches, axis=0)
+    drift_shift_matched_mean_peak = drift_shift_matched_mean[:, peak_channel]
+
+    drift_shift_matched_peak = drift_shift_matched_batches[:, :,
+                               peak_channel]  # IK change: added this line for plotting the errorbars.
+
+    # recenter spike absolute maximum
+    if do_shift_match:
+        shift = (np.argmax(np.abs(drift_shift_matched_mean_peak)) - drift_shift_matched_mean_peak.shape[0] // 2) % \
+                drift_shift_matched_mean_peak.shape[0]
+        drift_shift_matched_mean = np.concatenate([drift_shift_matched_mean[shift:], drift_shift_matched_mean[:shift]],
+                                                  axis=0)
+        drift_shift_matched_mean_peak = np.concatenate(
+            [drift_shift_matched_mean_peak[shift:], drift_shift_matched_mean_peak[:shift]], axis=0)
+
+        drift_shift_matched_peak = np.concatenate([drift_shift_matched_peak[shift:], drift_shift_matched_peak[:shift]],
+                                                  axis=0)  # IK change
+    return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel, drift_shift_matched_peak  # IK change
 
 def shift_match(waves, alignment_channel,
                 chan_range=2, recenter_spikes=False,
@@ -1029,6 +1195,40 @@ def plot_random_waveforms(spike_waveforms, num_samples=100): #IK change: added
     plt.tight_layout()
     plt.subplots_adjust(top=0.95)  # Adjust title positioning
     plt.show(block=True)
+
+
+import numpy as np # IK change: added
+import matplotlib.pyplot as plt # IK change: added
+
+
+def plot_trial_spikes(trial, spike_times, y=None, ax=None, annotation_fields=None, spike_height=None): # IK change: added
+    if y is None: # IK change: added
+        y = trial.index
+    if ax is None:
+        fig, ax = plt.subplots()
+    if annotation_fields is None:
+        annotation_fields = []
+    if spike_height is None:
+        spike_height = default_spike_height()
+
+    if len(spike_times) == 0:
+        return []
+
+    t_vals_matrix = np.array([spike_times, spike_times, np.full_like(spike_times, np.nan)])
+    t_vals = t_vals_matrix.flatten(order='F')
+    y_vals = np.tile([y, y + spike_height, np.nan], len(spike_times))
+
+    h, = ax.plot(1e3 * t_vals, y_vals, color=[0.2, 0.2, 0.2], linewidth=0.25)
+
+    for field in annotation_fields:
+        values = np.full_like(t_vals, str(getattr(trial, field)), dtype=object)
+        ax.text(1e3 * spike_times[0], y, values[0], fontsize=8, verticalalignment='bottom')
+
+    return h
+
+
+def default_spike_height(): #IK change: added
+    return 1.0  # Set this to an appropriate default value
 
 
 # Recurrent imports
