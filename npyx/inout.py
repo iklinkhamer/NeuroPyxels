@@ -201,8 +201,9 @@ def metadata(dp):
                 meta[filt_key]['binary_relative_path']=binary_rel_path
                 meta[filt_key]['binary_byte_size']=os.path.getsize(dp/binary_rel_path)
                 if filt_key=='highpass' and params_f.exists() and params['dat_path']!=binary_rel_path:
-                    print((f'\033[34;1mWARNING edit dat_path in params.py '
-                    f'so that it matches relative location of high pass filtered binary file: {binary_rel_path}'))
+                    #print((f'\033[34;1mWARNING edit dat_path in params.py '
+                    #f'so that it matches relative location of high pass filtered binary file: {binary_rel_path}'))
+                    IK_var = 1 # IK change: commented the previous lines and added this.
             else:
                 meta[filt_key]['binary_relative_path']='not_found'
                 meta[filt_key]['binary_byte_size']='unknown'
