@@ -116,6 +116,48 @@ def wvf(dp, u=None, n_waveforms=100, t_waveforms=82, selection='regular', period
 
     return waveforms
 
+
+@npyx_cacher
+def wvf_ik(dp, u=None, n_waveforms=100, t_waveforms=82, selection='regular', periods='all', # IK added this whole function
+        spike_ids=None, wvf_batch_size=10, ignore_nwvf=True,
+        save=True, verbose=False, again=False,
+        whiten=False, med_sub=False, hpfilt=False, hpfiltf=300,
+        nRangeWhiten=None, nRangeMedSub=None, ignore_ks_chanfilt=True,
+        return_corrupt_mask=False,
+        cache_results=True, cache_path=None):
+    '''
+    Second version of this function so that the previous cache results aren't constantly being overwritten.
+    '''
+    dp = Path(dp)
+
+    if spike_ids is not None:
+        if u is not None and verbose: print('WARNING you provided both u and spike_ids! u is ignored.')
+        if n_waveforms != 100 and verbose: print(
+            'WARNING you provided both n_waveforms and spike_ids! n_waveforms is ignored.')
+        if not isinstance(periods, str) and verbose: print(
+            'WARNING you provided both periods and spike_ids! periods is ignored.')
+        u = np.unique(np.load(Path(dp) / 'spike_clusters.npy')[spike_ids])
+        assert len(u) == 1, 'WARNING the spike ids that you provided seem to belong to different units!! Double check!'
+        u = u[0]
+    dp, u = get_source_dp_u(dp, u)
+
+
+    waveforms = get_waveforms(dp, u, n_waveforms, t_waveforms,
+                              selection, periods, spike_ids, wvf_batch_size, ignore_nwvf,
+                              whiten, med_sub, hpfilt, hpfiltf, nRangeWhiten, nRangeMedSub,
+                              ignore_ks_chanfilt, verbose,
+                              True, return_corrupt_mask, again,
+                              cache_results=cache_results, cache_path=cache_path)
+
+    if return_corrupt_mask:
+        (waveforms, corrupt_mask) = waveforms
+
+
+    if return_corrupt_mask:
+        return waveforms, corrupt_mask
+
+    return waveforms
+
 # def get_w(traces, slc, _n_samples_extract):
 #     # Get slice
 #     extract = traces[slc].astype(np.float32)
@@ -574,7 +616,7 @@ def wvf_dsmatch_for_plotting_ik(dp, u, n_waveforms=100, t_waveforms=240, periods
     ## Subsample waveforms based on available RAM
     vmem = dict(psutil.virtual_memory()._asdict())
     available_RAM = vmem['available']
-    single_w_size = wvf(dp, None, t_waveforms=t_waveforms, spike_ids=[0],
+    single_w_size = wvf_ik(dp, None, t_waveforms=t_waveforms, spike_ids=[0],
                         cache_results=cache_results, cache_path=cache_path).nbytes
     max_n_waveforms = available_RAM // single_w_size - 100  # -100 to be safe
     n_waves_used_for_matching = min(n_waves_used_for_matching, max_n_waveforms)
@@ -595,7 +637,7 @@ def wvf_dsmatch_for_plotting_ik(dp, u, n_waveforms=100, t_waveforms=240, periods
     # After waves have been extracted, put the index of the channel with the
     # max amplitude as well as the max amplitude into the peak_chan_split array
     spike_ids_split = spike_ids_split.flatten()
-    raw_waves, corrupt_mask = wvf(dp, u=None,
+    raw_waves, corrupt_mask = wvf_ik(dp, u=None,
                                   n_waveforms=n_waveforms, t_waveforms=t_waveforms,
                                   selection='regular', periods=periods, spike_ids=spike_ids_split,
                                   wvf_batch_size=wvf_batch_size, ignore_nwvf=ignore_nwvf,
@@ -683,20 +725,16 @@ def wvf_dsmatch_for_plotting_ik(dp, u, n_waveforms=100, t_waveforms=240, periods
     drift_shift_matched_mean = np.median(drift_shift_matched_batches, axis=0)
     drift_shift_matched_mean_peak = drift_shift_matched_mean[:, peak_channel]
 
-    drift_shift_matched_peak = drift_shift_matched_batches[:, :,
-                               peak_channel]  # IK change: added this line for plotting the errorbars.
+    drift_shift_matched_peak = drift_shift_matched_batches[:, :, peak_channel]  # IK change: added this line for plotting the errorbars.
 
     # recenter spike absolute maximum
     if do_shift_match:
-        shift = (np.argmax(np.abs(drift_shift_matched_mean_peak)) - drift_shift_matched_mean_peak.shape[0] // 2) % \
-                drift_shift_matched_mean_peak.shape[0]
-        drift_shift_matched_mean = np.concatenate([drift_shift_matched_mean[shift:], drift_shift_matched_mean[:shift]],
-                                                  axis=0)
-        drift_shift_matched_mean_peak = np.concatenate(
-            [drift_shift_matched_mean_peak[shift:], drift_shift_matched_mean_peak[:shift]], axis=0)
+        shift = (np.argmax(np.abs(drift_shift_matched_mean_peak)) - drift_shift_matched_mean_peak.shape[0]//2)%drift_shift_matched_mean_peak.shape[0]
+        drift_shift_matched_mean = np.concatenate([drift_shift_matched_mean[shift:], drift_shift_matched_mean[:shift]], axis=0)
+        drift_shift_matched_mean_peak = np.concatenate([drift_shift_matched_mean_peak[shift:], drift_shift_matched_mean_peak[:shift]], axis=0)
 
-        drift_shift_matched_peak = np.concatenate([drift_shift_matched_peak[shift:], drift_shift_matched_peak[:shift]],
-                                                  axis=0)  # IK change
+        drift_shift_matched_peak = np.concatenate([drift_shift_matched_peak[:, shift:], drift_shift_matched_peak[:, :shift]], axis=1)  # IK change
+
     return drift_shift_matched_mean_peak, drift_shift_matched_mean, drift_matched_spike_ids, peak_channel, drift_shift_matched_peak  # IK change
 
 def shift_match(waves, alignment_channel,
