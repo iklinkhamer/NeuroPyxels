@@ -143,6 +143,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     bad_units = []
     all_wvf_longer = [] #IK change: added this line
     all_wvfs_longer = [] #IK change: added this line
+    all_wvfs_together_longer = []
     for u in tqdm(
         units,
         desc="Preparing waveforms and ACGs for classification",
@@ -182,7 +183,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         try:
             wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False)
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False) 
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False)
         if np.isnan(wvf).any():  # IK change: Added breakpoint
             bad_units.append(u)  # IK change added
             continue  # IK change added
@@ -197,7 +198,13 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
         all_wvf_longer.append(datasets.preprocess_template(wvf_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
         all_wvfs_longer.append(datasets.preprocess_template(wvfs_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
-
+        wvf_longer = np.array(wvf_longer)
+        wvfs_longer = np.array(wvfs_longer)
+        wvfs_together = np.concatenate((wvf_longer.reshape(1,wvf_longer.shape[0]), wvfs_longer), axis=0)
+        all_wvfs_together_longer.append(datasets.preprocess_template(wvfs_together, peak_sign=peak_sign, clip_size=(1e-3, 3e-3)))
+        #reshaped_all_wvf_longer = [arr.reshape(1, -1) for arr in all_wvf_longer]
+        #reshaped_all_wvf_longer = np.vstack(all_wvf_longer)
+        #a_test = np.concatenate((reshaped_all_wvf_longer, all_wvfs_longer),axis=0)
         _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
         acg, _ = corr.convert_acg_log(acg, 1, 2000)
         acgs_3d.append(acg.ravel() * 10)
@@ -214,7 +221,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
     if len(acgs_3d) == 0:
         raise ValueError("No units were found with the provided parameter choices after quality checks.")
 
-    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units, all_wvf_longer, all_wvfs_longer #IK change: added wvf_IK
+    return np.concatenate((acgs_3d, waveforms), axis=1), bad_units, all_wvf_longer, all_wvfs_longer, all_wvfs_together_longer #IK change: added wvf_IK
 
 
 def get_layer_information(args, good_units):
@@ -385,13 +392,13 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
         else:
-            prediction_dataset, bad_units, wvf_longer, wvfs_longer = prepare_dataset_from_binary(  #IK change: added wvf_IK
+            prediction_dataset, bad_units, wvf_longer, wvfs_longer, wvfs_together = prepare_dataset_from_binary(  #IK change: added wvf_IK
                 args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
 
-    return prediction_dataset, good_units, wvf_longer, wvfs_longer #IK change: added wvf_IK
+    return prediction_dataset, good_units, wvf_longer, wvfs_longer, wvfs_together #IK change: added wvf_IK
 
 
 def format_predictions(predictions_matrix: np.ndarray) -> tuple:
@@ -588,7 +595,7 @@ def run_cell_types_classifier(
 
     # Prepare the data for prediction
     #breakpoint()
-    prediction_dataset, good_units, wvf_longer, wvfs_longer = prepare_dataset(args) #IK change: added wvf_IK
+    prediction_dataset, good_units, wvf_longer, wvfs_longer, wvfs_together = prepare_dataset(args) #IK change: added wvf_IK
 
     if args.use_layer:
         one_hot_layer, args = get_layer_information(args, good_units)
@@ -700,8 +707,8 @@ def run_cell_types_classifier(
             plot_features_1cell_vertical(
                 i,
                 prediction_dataset[:, :2010].reshape(-1, 10, 201) * 100,
-                np.array(wvf_longer), # IK change . previous: #prediction_dataset[:, 2010:],
-                wvfs_longer, #IK change: added wvf_IK
+                np.stack([arr[0] for arr in wvfs_together]), # IK change . previous: #prediction_dataset[:, 2010:], np.stack(wvf_longer), # IK change . previous: #prediction_dataset[:, 2010:],
+                [arr[1:] for arr in wvfs_together], #IK change: added wvf_IK  wvfs_longer, #IK change: added wvf_IK
                 predictions=raw_probabilities,
                 saveDir=plots_folder,
                 fig_name=f"unit_{unit}_cell_type_predictions",
