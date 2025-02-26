@@ -488,7 +488,7 @@ def save_calibrated_ensemble(calibrated_models, save_directory):
         save_serialised(cal_model, os.path.join(save_directory, f"calibrated_model_{i}.pkl"))
 
 
-#@require_advanced_deps("torch", "laplace", "requests", "dill")
+#@require_advanced_deps("torch", "laplace", "requests", "dill") # IK change. commented this line.
 def run_cell_types_classifier(
     data_path: str = ".",
     quality: str = "good",
