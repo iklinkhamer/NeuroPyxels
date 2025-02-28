@@ -33,7 +33,8 @@ mpl.rcParams['ps.fonttype'] = 42
 if 'Arial' in [f.name for f in mpl.font_manager.fontManager.ttflist]:
     mpl.rcParams['font.family'] = 'Arial'
 else:
-    print("Oh no! Arial isn't on your system. We strongly recommend that you install Arial for your aesthetic sanity.")
+    ik_var = 1  # IK change. added to prevent crashing
+    #print("Oh no! Arial isn't on your system. We strongly recommend that you install Arial for your aesthetic sanity.") # IK change. commented this because it is so f*ing annoying.
 
 
 #######################################################
@@ -286,7 +287,7 @@ def mplp(fig=None,
     yscalebar_unit = default_mplp_params['yscalebar_unit']
 
 
-    hfont = {'fontname':'Arial'}
+    hfont = {'fontname':'DejaVu Sans'} #IK change. old code: #hfont = {'fontname':'Arial'}
     if figsize is not None:
         assert axsize is  None,\
             "You cannot set both the axes and figure size - the axes size is based on the figure size."
@@ -425,7 +426,7 @@ def mplp(fig=None,
             4,
         }, "legend_loc must comply to the bbox_to_anchor format ( (x,y) or (x,y,width,height))."
     if show_legend: ax.legend(bbox_to_anchor=legend_loc, loc='lower left',
-                               prop={'family':'Arial'})
+                               prop={'family':'DejaVu Sans'}) #IK change: used to be Arial
     elif hide_legend: ax.legend([],[], frameon=False)
 
     if colorbar:
@@ -891,7 +892,7 @@ def add_colorbar(fig, ax, mappable=None, vmin=None, vmax=None,
         assert len(ctickslabels)==len(cticks),\
             f"ctickslabels should have the same length as cticks ({len(cticks)})!" 
     if clabel is not None:
-        cbar_ax.yaxis.label.set_font_properties(mpl.font_manager.FontProperties(family='arial', weight=clabel_w, size=clabel_s))
+        cbar_ax.yaxis.label.set_font_properties(mpl.font_manager.FontProperties(family='DejaVu Sans', weight=clabel_w, size=clabel_s)) #IK change: used to be arial
         cbar_ax.yaxis.label.set_rotation(-90)
         cbar_ax.yaxis.label.set_va('bottom')
         cbar_ax.yaxis.label.set_ha('center')

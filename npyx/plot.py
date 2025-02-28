@@ -67,7 +67,8 @@ mpl.rcParams['ps.fonttype'] = 42
 if 'Arial' in [f.name for f in matplotlib.font_manager.fontManager.ttflist]:
     matplotlib.rcParams['font.family'] = 'Arial'
 else:
-    print("Oh no! Arial isn't on your system. We strongly recommend that you install Arial for your aesthetic sanity.")
+    ik_var = 1 # IK change. added to prevent crashing
+    #print("Oh no! Arial isn't on your system. We strongly recommend that you install Arial for your aesthetic sanity.") # IK change. commented this because it is to f*ing annoying.
 
 
 #%% plotting utilities ##############################################################################################
