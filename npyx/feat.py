@@ -1108,12 +1108,16 @@ def extract_single_channel_features(relevant_waveform, plot_debug=False, interp_
         return [0] * 16
 
     first_trough_t, first_peak_t = find_relevant_peaks(peak_times, peak_values, 0.8 * np.std(relevant_waveform))
-
+    
     neg_v = relevant_waveform[first_trough_t]
     neg_t = first_trough_t
 
     pos_v = relevant_waveform[first_peak_t]
     pos_t = first_peak_t
+    
+    # Spatial Decay (ratio of second peak to first peak) #IK change. added this line to find spatial decay.
+    #second_peak_t = peak_times(np.where(np.isin(peak_times, first_peak_t))+1) #IK change    
+    #spatial_decay = relevant_waveform[second_peak_t] / relevant_waveform[first_peak_t] if relevant_waveform[first_peak_t] != 0 else np.nan #IK added.
 
     # pos 10-90
     _, _, pos_10_90_t = repol_10_90_t(relevant_waveform, first_peak_t, first_trough_t)
@@ -1157,8 +1161,20 @@ def extract_single_channel_features(relevant_waveform, plot_debug=False, interp_
 
     # Multiply slope coefficients by 100 (and divide tau) to undo interpolation effect and obtain meaningful values
     tau, repol_coeff, depol_coeff = tau / interp_coeff, repol_coeff * interp_coeff, depol_coeff * interp_coeff
-
-    return [
+    
+    waveform_features_dict_IK = dict() #IK change. added this so that when I get the waveform features I can actually see which value corresponds to what feature instead of just getting a list of numbers without any context.
+    waveform_features_dict_IK["amplitude_first_trough"] = neg_v 
+    waveform_features_dict_IK["first_trough_t"]=neg_t
+    waveform_features_dict_IK["amplitude_first_peak"]=pos_v
+    waveform_features_dict_IK["first_peak_t"]=pos_t
+    waveform_features_dict_IK["pos_half_width"]=pos50
+    waveform_features_dict_IK["neg_half_width"]=neg50
+    waveform_features_dict_IK["trough_onset_t"]=onset_t
+    waveform_features_dict_IK["trough_amp"]=onset_amp
+    waveform_features_dict_IK["wvf_width"]=wvfd
+    waveform_features_dict_IK["peak_to_trough_ratio"]=ptr
+    #waveform_features_dict_IK["spatial_decay"]=spatial_decay
+    wvf_feats = list([ #IK change 25-03-2025. moved this up from the return line and made this a variable first to try to prevent errors.
         neg_v,
         neg_t,
         pos_v,
@@ -1175,7 +1191,9 @@ def extract_single_channel_features(relevant_waveform, plot_debug=False, interp_
         a_coeff,
         repol_coeff[0],
         depol_coeff[0],
-    ]
+    ])
+    return wvf_feats, waveform_features_dict_IK #IK change. added waveform_features_IK
+    
 
 
 def extract_spatial_features(waveform_2d, peak_chan, relevant_channel, somatic_mask, chanmap):
@@ -1255,23 +1273,27 @@ def waveform_features(
         relevant_waveform = peak_waveform
         relevant_channel = peak_channel
         somatic = False
-
-    peak_channel_features = extract_single_channel_features(relevant_waveform, plot_debug, interp_coeff, fs)
+    if peak_channel==30:
+        breakpoint()
+        a = 1
+    [peak_channel_features, waveform_features_IK] = extract_single_channel_features(relevant_waveform, plot_debug, interp_coeff, fs)
     spatial_features = (
         extract_spatial_features(waveform_2d, peak_channel, relevant_channel, somatic_mask, chanmap)
         if chanmap is not None
         else [0, 0]
     )
+
+    
     return [
         int(relevant_channel),
         int(somatic),
         max_peaks,
         *peak_channel_features,
         *spatial_features,
-    ]
+    ], waveform_features_IK #IK change. added waveform_features_IK
 
 
-def waveform_features_json(dp: str, unit: int, plot_debug: bool = False) -> list:
+def waveform_features_json(dp: str, unit: int, plot_debug: bool = False, dat_dir: str = None) -> list: #IK change 25-03-2025. old code: (dp: str, unit: int, plot_debug: bool = False) -> list:
     """
     Given a path to a recording and a unit number, return a list of features for that unit.
     Wrapper function for waveform_features.
@@ -1288,15 +1310,17 @@ def waveform_features_json(dp: str, unit: int, plot_debug: bool = False) -> list
         dp,
         unit,
         verbose=False,
-        again=True,
+        again=False, # IK change. old code: again=True,
         save=True,
+        dat_dir=dat_dir, #IK change 25-03-2025. added this line
     )
 
-    chanmap = chan_map(probe_version="1.0")
+    chanmap = chan_map(dp=dp, probe_version="local") #IK change. old code: chanmap = chan_map(probe_version="1.0")
+    
 
-    wvf_feats = waveform_features(waveform_2d.T, peak_channel, chanmap, plot_debug)
+    [wvf_feats, waveform_features_IK] = waveform_features(waveform_2d=waveform_2d.T, peak_channel=peak_channel, chanmap=chanmap, plot_debug=plot_debug) #IK change. added the variables explicitly  because before plot_debog was given to interpolate and that gave an error. #IK change. added waveform_features_IK
 
-    return [dp, unit] + wvf_feats
+    return [dp, unit] + wvf_feats, waveform_features_IK #IK change. added waveform_features_IK
 
 
 def plot_all_features(waveform, normalise=True, dp=None, unit=None, label=None):

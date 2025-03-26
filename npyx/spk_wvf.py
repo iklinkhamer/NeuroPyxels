@@ -34,7 +34,7 @@ def wvf(dp, u=None, n_waveforms=100, t_waveforms=82, selection='regular', period
         whiten=False, med_sub=False, hpfilt=False, hpfiltf=300,
         nRangeWhiten=None, nRangeMedSub=None, ignore_ks_chanfilt=True,
         return_corrupt_mask=False,
-        cache_results=True, cache_path=None):
+        cache_results=True, cache_path=None, dat_dir=None): #IK change 25-03-2025. old code: cache_results=True, cache_path=None):
     '''
     ********
     Extracts a sample of waveforms from the raw data file.
@@ -102,7 +102,7 @@ def wvf(dp, u=None, n_waveforms=100, t_waveforms=82, selection='regular', period
                  whiten, med_sub, hpfilt, hpfiltf, nRangeWhiten, nRangeMedSub,
                  ignore_ks_chanfilt, verbose,
                  True, return_corrupt_mask, again,
-                 cache_results=cache_results, cache_path=cache_path)
+                 cache_results=cache_results, cache_path=cache_path, dat_dir=dat_dir) #IK change 25-03-2025. old code: cache_results=cache_results, cache_path=cache_path)
 
     if return_corrupt_mask:
         (waveforms, corrupt_mask) = waveforms
@@ -174,13 +174,16 @@ def get_waveforms(dp, u, n_waveforms=100, t_waveforms=82, selection='regular', p
                   whiten=0, med_sub=0, hpfilt=0, hpfiltf=300,
                   nRangeWhiten=None, nRangeMedSub=None, ignore_ks_chanfilt=True, verbose=False,
                   med_sub_in_time=True, return_corrupt_mask=False, again=False,
-                  cache_results=True, cache_path=None):
+                  cache_results=True, cache_path=None, dat_dir=None): #IK change 25-03-2025. old code: cache_results=True, cache_path=None):
     f"{wvf.__doc__}"
 
     # Extract and process metadata
     dp             = Path(dp)
     meta           = read_metadata(dp)
-    dat_path       = get_binary_file_path(dp, 'ap')
+    if dat_dir: #IK change. added this line
+        dat_path       = get_binary_file_path(dat_dir, 'ap') #IK change. added this line
+    else: #IK change. added this line.
+        dat_path       = get_binary_file_path(dp, 'ap')
 
     dp_source      = get_source_dp_u(dp, u)[0]
     meta           = read_metadata(dp_source)
@@ -190,7 +193,7 @@ def get_waveforms(dp, u, n_waveforms=100, t_waveforms=82, selection='regular', p
     sample_rate    = meta['highpass']['sampling_rate']
     item_size      = dtype.itemsize
     fileSizeBytes  = meta['highpass']['binary_byte_size']
-    assert not isinstance(fileSizeBytes, str), f"It seems like there isn't any binary file at {dp}."
+    assert not isinstance(fileSizeBytes, str), f"It seems like there isn't any binary file at {dp}." #IK change. commented this line
     if meta['acquisition_software']=='SpikeGLX':
         if meta['highpass']['fileSizeBytes'] != fileSizeBytes:
             print((f"\033[91;1mMismatch between ap.meta and ap.bin file size"
@@ -281,7 +284,7 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
                 use_average_peakchan = False, max_allowed_amplitude = 3000, max_allowed_shift=3,
                 n_waves_to_average=800, plot_debug=False, do_shift_match=True, n_waveforms_per_batch=10,
                 subselect_max_template=False, amp_max_percentile=0.95,
-                cache_results=True, cache_path=None):
+                cache_results=True, cache_path=None, dat_dir=None): #IK change 25-03-2025. old code: cache_results=True, cache_path=None):
     """
     ********
     Extract the drift and shift matched mean waveforms of the specified unit.
@@ -360,6 +363,7 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
         - cache_results: bool, whether to cache results at local_cache_memory.
         - cache_path: None|str, where to cache results.
                         If None, dp/.NeuroPyxels will be used.
+        - dat_dir: directory where the continuous.dat file can be found #IK change 25-03-2025. added this line
 
     Returns:
         - peak_dsmatched_waveform: (n_samples,) array (t_waveforms samples) storing the peak channel waveform
@@ -415,8 +419,8 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
     ## Subsample waveforms based on available RAM
     vmem=dict(psutil.virtual_memory()._asdict())
     available_RAM = vmem['available']
-    single_w_size = wvf(dp, None, t_waveforms=t_waveforms, spike_ids=[0],
-                        cache_results=cache_results, cache_path=cache_path).nbytes
+    single_w_size = wvf(dp, None, t_waveforms=t_waveforms, spike_ids=[0], 
+                        cache_results=cache_results, cache_path=cache_path, dat_dir=dat_dir).nbytes #IK change 25-03-2025. old code: cache_results=cache_results, cache_path=cache_path).nbytes
     max_n_waveforms = available_RAM//single_w_size-100 # -100 to be safe
     n_waves_used_for_matching = min(n_waves_used_for_matching, max_n_waveforms)
     if n_waves_used_for_matching<1000 and verbose:
@@ -444,7 +448,7 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
                     hpfilt = hpfilt, hpfiltf = hpfiltf, nRangeWhiten=nRangeWhiten,
                     nRangeMedSub=nRangeMedSub, ignore_ks_chanfilt=True,
                     return_corrupt_mask=True,
-                    cache_results=cache_results, cache_path=cache_path)
+                    cache_results=cache_results, cache_path=cache_path, dat_dir=dat_dir) #IK change 25-03-2025. old code: cache_results=cache_results, cache_path=cache_path)
     
     # Remove waveforms and spike_ids of batches with corrupt waveforms
     spike_ids_split = spike_ids_split.reshape(-1,n_waveforms_per_batch)
@@ -464,7 +468,7 @@ def wvf_dsmatch(dp, u, n_waveforms=100, t_waveforms=82, periods='all',
     ## Find peak channel (and store amplitude) of every batch
     # only consider amplitudes on channels around original peak channel
     original_peak_chan = get_peak_chan(dp, u, again=again,
-                                       cache_results=cache_results, cache_path=cache_path)
+                                       cache_results=cache_results, cache_path=cache_path, dat_dir=dat_dir) #IK change 25-03-2025. old code: cache_results=cache_results, cache_path=cache_path)
     c_left, c_right = max(0, original_peak_chan-peakchan_allowed_range), min(original_peak_chan+peakchan_allowed_range, mean_waves.shape[2])
     # calculate amplitudes ("peak-to-peak"), but ONLY using 2ms (-30,30) in the middle
     amp_t_span = 20 #samples
@@ -914,7 +918,7 @@ def get_pc(waveforms):
 @npyx_cacher
 def get_peak_chan(dp, unit, use_template=True, again=False,
                   ignore_ks_chanfilt=True,  periods='all', save=True,
-                  cache_results=True, cache_path=None):
+                  cache_results=True, cache_path=None, dat_dir=None): #IK change 25-03-2025. old code: cache_results=True, cache_path=None):
     '''
     Returns index of peak channel, either according to the full probe channel map (0 through 383)
                                    or according to the kilosort channel map (0 through N with N<=383)
@@ -961,7 +965,7 @@ def get_peak_chan(dp, unit, use_template=True, again=False,
     else:
         waveforms=wvf(dp, u=unit, n_waveforms=200, t_waveforms=82,
                       selection='regular', periods=periods, spike_ids=None, again=again, save=save,
-                      ignore_ks_chanfilt=True, cache_results=cache_results, cache_path=cache_path)
+                      ignore_ks_chanfilt=True, cache_results=cache_results, cache_path=cache_path, dat_dir=dat_dir) #IK change 25-03-2025. old code: ignore_ks_chanfilt=True, cache_results=cache_results, cache_path=cache_path)
         probe_peak_chan = get_pc(waveforms)
         if ignore_ks_chanfilt: # absolute == relative channel index
             peak_chan = probe_peak_chan

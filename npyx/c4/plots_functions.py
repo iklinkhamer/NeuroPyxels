@@ -810,8 +810,11 @@ def plot_features_1cell_vertical(
 
     if saveDir is not None:
         fig_name = f"cell {i}" if fig_name is None else fig_name
-        npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "pdf")
-        npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "eps") #IK change: added eps save.
+        import os #IK change. added
+        if not os.path.exists(os.path.join(saveDir,f"{fig_name}.pdf")): #IK change. adeed
+            npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "pdf")
+        if not os.path.exists(os.path.join(saveDir, f"{fig_name}.eps")): #IK change. added
+            npyx.plot_utils.save_mpl_fig(fig, fig_name, saveDir, "eps") #IK change: added eps save.
 
     if not plot:
         plt.close(fig)

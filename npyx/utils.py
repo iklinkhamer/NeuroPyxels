@@ -7,6 +7,7 @@ from ast import literal_eval as ale
 from typing import Union
 import shutil
 
+from exceptiongroup import catch
 from numba import njit
 from numba.typed import List
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
@@ -164,13 +165,18 @@ def read_pyfile(filepath, ignored_chars=[" ", "'", "\"", "\n", "\r"]):
 def list_files(directory, extension, full_path=False):
     """
     List files with extension "extension" in directory "directory"."""
-    directory=str(directory)
-    if extension[0]!='.': extension = '.'+extension
-    files = [f for f in os.listdir(directory) if f.endswith(extension)]
-    files.sort()
-    if full_path:
-        return [Path('/'.join([directory,f])) for f in files]
-    return files
+    try: #IK change
+        directory=str(directory)
+        if extension[0]!='.': extension = '.'+extension
+        files = [f for f in os.listdir(directory) if f.endswith(extension)]
+        files.sort()
+        if full_path:
+            return [Path('/'.join([directory,f])) for f in files]
+        return files
+    except: #IK change
+        files = [] # IK change
+        return files # IK change
+        print("Error message IK: Failed to find binary file, which doesn't matter") #IK change
 
 def has_write_permission(path: Union[str, Path]) -> bool:
     """Check if the given path is writable without creating it."""

@@ -204,6 +204,11 @@ def metadata(dp):
                     #print((f'\033[34;1mWARNING edit dat_path in params.py '
                     #f'so that it matches relative location of high pass filtered binary file: {binary_rel_path}'))
                     IK_var = 1 # IK change: commented the previous lines and added this.
+            elif os.path.exists(os.path.join(dp,"byte_size_continuous_file.txt")): #IK change. added this elif statement to try and prevent the need for the big continuous file to be synchronized.
+                with open(os.path.join(dp,"byte_size_continuous_file.txt"), "r") as f:
+                    byte_size_string = f.readline().strip()  # Read first line and remove whitespace                
+                byte_size = int(byte_size_string)  # Convert to integer            
+                meta[filt_key]['binary_byte_size']=byte_size
             else:
                 meta[filt_key]['binary_relative_path']='not_found'
                 meta[filt_key]['binary_byte_size']='unknown'
