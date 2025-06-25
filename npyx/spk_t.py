@@ -699,8 +699,8 @@ def train_quality(dp, unit, period_m=[0,20],
                      good_fp_start_end_plot, good_fn_start_end_plot, title,
                      saveFig=saveFig, saveDir=saveDir, _format=_format,
                      figname=f"fp_fn_{unit}_{period_m}")
-        
-        return good_spikes_m, good_fp_start_end.tolist(), good_fn_start_end.tolist()
+        fp_toplot = [], fn_toplot=[] #IK change. added
+        return good_spikes_m, good_fp_start_end.tolist(), good_fn_start_end.tolist(), fp_toplot, fn_toplot #IK change. old code: return good_spikes_m, good_fp_start_end.tolist(), good_fn_start_end.tolist()
     
     n_spikes = np.count_nonzero((unit_train>period_s[0])&(unit_train<period_s[1]))
 
@@ -723,6 +723,8 @@ def train_quality(dp, unit, period_m=[0,20],
 
 
     fp_toplot, chunk_fp_t, fn_toplot, chunk_fn_t = [], [], [], []
+    fp_rates, fp_spike_counts = [], [] #IK change: added
+    fn_rates, fn_spike_counts = [], [] #IK change: added
     if len(unit_amp) > n_spikes_threshold:
         
         # False negative estimation
@@ -735,7 +737,12 @@ def train_quality(dp, unit, period_m=[0,20],
                 chunk_bins = estimate_bins(amplitudes_chunk, rule='Fd')
                 if chunk_bins> 3:
                     x_c, p0_c, min_amp_c, n_fit_c, n_fit_no_cut_c, chunk_spikes_missing = gaussian_amp_est(amplitudes_chunk, chunk_bins)
-                    fn_toplot.append(chunk_spikes_missing/100)
+                    fn_rate = chunk_spikes_missing / 100
+                    #print(f"fn rate: {fn_rate}")
+                    fn_toplot.append(fn_rate)
+                    chunk_fn_t.append(t1 + (t2 - t1)/2)
+                    fn_rates.append(fn_rate) #IK change. added
+                    fn_spike_counts.append(n_spikes_chunk) #IK change. added
                     chunk_fn_t.append(t1+(t2-t1)/2)
                     if (~np.isnan(chunk_spikes_missing)) & (chunk_spikes_missing <= fn_threshold*100):
                         passed_fn[i] = [t1, t2, 1]
@@ -763,9 +770,38 @@ def train_quality(dp, unit, period_m=[0,20],
                 fp_rate = npyx.metrics.isi_violations(unit_train, min_time=t1, max_time=t2,
                                          isi_threshold=violations_ms/1000, min_isi=0)[0]
                 fp_toplot.append(fp_rate)
+                #print(f"fp rate: {fp_rate}")
                 chunk_fp_t.append(t1+(t2-t1)/2)
+                fp_rates.append(fp_rate) #IK change. added
+                fp_spike_counts.append(n_spikes_chunk) #IK change. added
                 if (fp_rate <= fp_threshold):
                     passed_fp[i] = [t1, t2, 1]
+
+    # Compute weighted averages of FP and FN rates across chunks #IK change. added code below
+    fp_spike_counts = np.array(fp_spike_counts)
+    fn_spike_counts = np.array(fn_spike_counts)
+    fp_rates = np.array(fp_rates)
+    fn_rates = np.array(fn_rates)
+
+    # Clip values above 1 to 1
+    fp_rates = np.clip(fp_rates, a_min=0, a_max=1)
+    fn_rates = np.clip(fn_rates, a_min=0, a_max=1)
+
+    # Then continue with weighted averages calculation
+    overall_avg_fp = np.nansum(fp_rates * fp_spike_counts) / np.nansum(fp_spike_counts) if np.sum(
+        fp_spike_counts) > 0 else np.nan
+    overall_avg_fn = np.nansum(fn_rates * fn_spike_counts) / np.nansum(fn_spike_counts) if np.sum(
+        fn_spike_counts) > 0 else np.nan
+
+    #print("fp_rates (clipped):", fp_rates)
+    #print("fn_rates (clipped):", fn_rates)
+    #print("fp_spike_counts:", fp_spike_counts)
+    #print("fn_spike_counts:", fn_spike_counts)
+    #print("sum fp_spike_counts:", np.sum(fp_spike_counts))
+    #print("sum fn_spike_counts:", np.sum(fn_spike_counts))
+
+    #print("overall_avg_fp:", overall_avg_fp)
+    #print("overall_avg_fn:", overall_avg_fn)
 
     # Across all chunks, if at least 1 good chunk for both (else no spike can be called good)
     if (np.sum(passed_fp[:,2])  > 1) & (np.sum(passed_fn[:,2]) > 1):
@@ -834,7 +870,7 @@ def train_quality(dp, unit, period_m=[0,20],
                      saveFig=saveFig, saveDir=saveDir, _format=_format,
                      figname=f"fp_fn_{unit}_{period_m}")
 
-        return good_spikes_m, good_fp_start_end, good_fn_start_end
+        return good_spikes_m, good_fp_start_end, good_fn_start_end, overall_avg_fp , overall_avg_fn  #IK change. old code: return good_spikes_m, good_fp_start_end, good_fn_start_end
     
     else:
         good_spikes_m=(unit_train*0).astype(bool)
@@ -850,7 +886,7 @@ def train_quality(dp, unit, period_m=[0,20],
                      saveFig=saveFig, saveDir=saveDir, _format=_format,
                      figname=f"fp_fn_{unit}_{period_m}")
             
-        return good_spikes_m, [0], [0]
+        return good_spikes_m, [0], [0], overall_avg_fp, overall_avg_fn  #IK change. old code: return good_spikes_m, [0], [0]
 
 
 @docstring_decorator(train_quality.__doc__)
@@ -885,7 +921,7 @@ def trn_filtered(dp, unit, period_m=[0,20],
     dp = Path(dp)
     t = trn(dp,unit, enforced_rp=enforced_rp, again=again, cache_results=save, cache_path=cache_path)
     t_s=t/30000
-    good_spikes_m, good_fp_start_end, good_fn_start_end = train_quality(dp, unit, period_m,
+    good_spikes_m, good_fp_start_end, good_fn_start_end, fp_toplot, fn_toplot = train_quality(dp, unit, period_m, #IK change. old code:  good_spikes_m, good_fp_start_end, good_fn_start_end = train_quality(dp, unit, period_m,
                     fp_chunk_span, fp_chunk_size, fn_chunk_span, fn_chunk_size, use_or_operator,
                     violations_ms, fp_threshold, fn_threshold, again, save, verbose, plot_debug,
                     enforced_rp, saveFig, saveDir, _format)
@@ -908,12 +944,12 @@ def trn_filtered(dp, unit, period_m=[0,20],
             consecutive_good_chunk = list(range(maxend-maxrun+1, maxend+1))
             if len(consecutive_good_chunk) > consecutive_n_seconds:
                 good_spikes_m = (t_s>consecutive_good_chunk[0])&(t_s<consecutive_good_chunk[-1]+1)
-                return t[good_spikes_m], good_spikes_m
+                return t[good_spikes_m], good_spikes_m, fp_toplot, fn_toplot #IK change. old code: return t[good_spikes_m], good_spikes_m
         elif total_good_sections > consecutive_n_seconds:
-            return t[good_spikes_m], good_spikes_m
+            return t[good_spikes_m], good_spikes_m, fp_toplot, fn_toplot #IK change. old code: return t[good_spikes_m], good_spikes_m
 
     if verbose: print('No consecutive section passed the filters')
-    return np.array([0]), (t*0).astype(bool)
+    return np.array([0]), (t*0).astype(bool), fp_toplot, fn_toplot #IK change. old code: return np.array([0]), (t*0).astype(bool)
 
 
 def good_sections_from_mask(good_times_m, time_series=None):

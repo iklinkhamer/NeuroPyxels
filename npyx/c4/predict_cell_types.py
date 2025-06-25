@@ -30,6 +30,7 @@ import npyx.datasets as datasets
 from npyx.gl import get_units, load_units_qualities
 from npyx.spk_t import trn, trn_filtered, load_amplitudes # IK change: old code: from npyx.spk_t import trn, trn_filtered   #Note: from spk_t_IK import trn, trn_filtered
 from npyx.spk_wvf import wvf_dsmatch, wvf_dsmatch_for_plotting_ik   #IK change: old code: from npyx.spk_wvf import wvf_dsmatch
+from npyx.metrics import isi_violations #IK change: added
 
 ale = ast.literal_eval
 
@@ -161,20 +162,24 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         if len(t) < 100:
             bad_units.append(u)
             continue
-
+        """"
         # Load spike amplitudes #IK change: added
-        unit_amp = load_amplitudes(dp, u, verbose, 'all', again, enforced_rp, cache_results=save, cache_path=cache_path)
+        unit_amp = load_amplitudes(dp, u, cache_results=False, cache_path=cache_path)
+        amplitudes_period = unit_amp
+        spikes_period = t
+
         if period_m is None:
             period_m = [0, total_recording_minutes]
         period_s = [period_m[0] * 60, period_m[1] * 60]
         mask = (t >= period_s[0]) & (t < period_s[1])
         spikes_period = t[mask]
         amplitudes_period = unit_amp[mask]
+        """
 
         # We set period_m to None to use the whole recording
         if filter_spikes: #IK change. added this if-statement
             try:
-                t, _ = trn_filtered(
+                t, _, fp_rate, fn_rate = trn_filtered( #IK change. old code: t, _ = trn_filtered(
                     dp,
                     u,
                     period_m=None,
@@ -186,7 +191,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     cache_path=cache_path
                 )
             except (IndexError, pd.errors.EmptyDataError, ValueError):
-                t, _ = trn_filtered(
+                t, _, fp_rate, fn_rate = trn_filtered( #IK change. old code: t, _ = trn_filtered(
                     dp,
                     u,
                     period_m=None,
@@ -198,12 +203,16 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     save=save,
                     cache_path=cache_path
                 )
+            fp_rates.append(fp_rate) #IK change: added
+            fn_rates.append(fn_rate) #IK change: added
+            units_processed.append(u) #IK change: added
+
             if len(t) < 10:
                 bad_units.append(u)
                 continue
-
+        """
         # Calculate FP and FN rates on whole spike train
-        fp_rate = npyx.metrics.isi_violations(spikes_period, min_time=period_s[0], max_time=period_s[1], isi_threshold=violations_ms / 1000, min_isi=0)[0]
+        fp_rate = isi_violations(spikes_period, min_time=period_s[0], max_time=period_s[1], isi_threshold=violations_ms / 1000, min_isi=0)[0]
         chunk_bins = estimate_bins(amplitudes_period, rule='Fd')
         if chunk_bins > 3:
             x_c, p0_c, min_amp_c, n_fit_c, n_fit_no_cut_c, spikes_missing = gaussian_amp_est(amplitudes_period, chunk_bins)
@@ -214,6 +223,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         fp_rates.append(fp_rate)
         fn_rates.append(fn_rate)
         units_processed.append(u)
+        """
 
         try:
             wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False, cache_path=cache_path)
@@ -442,7 +452,7 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
             )
         else:
             prediction_dataset, bad_units, wvf_longer, wvfs_longer, wvfs_together = prepare_dataset_from_binary(  #IK change: added wvf_IK
-                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, False, args.cache_path, args.filter_spikes, args.save_path #IK change.  old code: args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
+                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, args.cache_results, args.cache_path, args.filter_spikes, args.save_path #IK change.  old code: args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
@@ -552,7 +562,7 @@ def run_cell_types_classifier(
     waveform_peak_sign: str = "negative",
     save_path: str = ".", #IK change: added
     cache_path: str = ".", #IK change
-    dat_dir: str= ".", #IK change
+    dat_path: str = ".", #IK change
     filter_spikes: bool = True, #IK change: added
     cache_results: bool = True, #IK change: added
 ) -> None:
@@ -586,7 +596,7 @@ def run_cell_types_classifier(
         peak_sign=waveform_peak_sign,
         save_path=save_path, #IK change: added
         cache_path=cache_path, #IK change
-        dat_dir=dat_dir, #IK change
+        dat_dir=dat_path, #IK change
         filter_spikes=filter_spikes, #IK change: added
         cache_results=cache_results, #IK change: added
     )
@@ -761,23 +771,25 @@ def run_cell_types_classifier(
     # Define a function to plot the features of a single unit
     def aux_plot_features(i, unit, labelmap):
         if unit in confidence_passing:
-            plot_features_1cell_vertical(
-                i,
-                prediction_dataset[:, :2010].reshape(-1, 10, 201) * 100,
-                np.stack([arr[0] for arr in wvfs_together]), # IK change . previous: #prediction_dataset[:, 2010:], np.stack(wvf_longer), # IK change . previous: #prediction_dataset[:, 2010:],
-                [arr[1:] for arr in wvfs_together], #IK change: added wvf_IK  wvfs_longer, #IK change: added wvf_IK
-                predictions=raw_probabilities,
-                saveDir=plots_folder,
-                fig_name=f"unit_{unit}_cell_type_predictions",
-                plot=False,
-                cbin=1,
-                cwin=2000,
-                figsize=(10, 4),
-                LABELMAP=labelmap,
-                C4_COLORS=C4_COLORS,
-                fs=30000,
-                unit_id=unit,
-            )
+            fig_name = f"unit_{unit}_cell_type_predictions"
+            if not os.path.exists(os.path.join(plots_folder,f"{fig_name}.pdf")) and not os.path.exists(os.path.join(plots_folder, f"{fig_name}.eps")): #IK change. added
+                plot_features_1cell_vertical(
+                    i,
+                    prediction_dataset[:, :2010].reshape(-1, 10, 201) * 100,
+                    np.stack([arr[0] for arr in wvfs_together]), # IK change . previous: #prediction_dataset[:, 2010:], np.stack(wvf_longer), # IK change . previous: #prediction_dataset[:, 2010:],
+                    [arr[1:] for arr in wvfs_together], #IK change: added wvf_IK  wvfs_longer, #IK change: added wvf_IK
+                    predictions=raw_probabilities,
+                    saveDir=plots_folder,
+                    fig_name=fig_name,
+                    plot=False,
+                    cbin=1,
+                    cwin=2000,
+                    figsize=(10, 4),
+                    LABELMAP=labelmap,
+                    C4_COLORS=C4_COLORS,
+                    fs=30000,
+                    unit_id=unit,
+                )
 
     if args.parallel:
         num_cores = get_n_cores(len(good_units))
