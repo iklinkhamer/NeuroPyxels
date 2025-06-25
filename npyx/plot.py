@@ -2158,7 +2158,7 @@ def plt_acg(unit, ACG, cbin=0.2, cwin=80, bChs=None, color=0, fs=30000,
 
     # Eventually save figure
     if saveFig:
-        ttl = '' if (title is None) else (' ' + ''.join(ch for ch in title if ch is not '\n'))
+        ttl = '' if (title is None) else (' ' + ''.join(ch for ch in title if ch != '\n'))        #IK change. old code: ttl = '' if (title is None) else (' ' + ''.join(ch for ch in title if ch is not '\n'))
         save_mpl_fig(fig,
                      f'acg{unit}-{cwin}_{cbin:.2f}' + ttl,
                      saveDir,

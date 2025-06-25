@@ -96,7 +96,7 @@ def ids(dp, unit, sav=True, verbose=False, periods='all',
     # Optional selection of spikes without duplicates
     dp_source = npyx.merger.get_source_dp_u(dp, unit)[0]
     fs = read_metadata(dp_source)["highpass"]['sampling_rate']
-    train = trn(dp, unit, again=again, enforced_rp=-1, cache_results=cache_results)
+    train = trn(dp, unit, again=again, enforced_rp=-1, cache_results=cache_results, cache_path=cache_path)
     duplicates_m = duplicates_mask(train, enforced_rp, fs)
     train = train[~duplicates_m]
     indices = indices[~duplicates_m]
@@ -219,7 +219,7 @@ def enforce_rp(t, enforced_rp=0, fs=30000):
     duplicate_m = duplicates_mask(t, enforced_rp, fs)
     return t[~duplicate_m]
 
-def isi(dp, unit, enforced_rp=0, sav=True, verbose=False, periods='all', again=False):
+def isi(dp, unit, enforced_rp=0, sav=True, verbose=False, periods='all', again=False, cache_path=None):
     '''
     ********
     routine from routines_spikes
@@ -232,7 +232,7 @@ def isi(dp, unit, enforced_rp=0, sav=True, verbose=False, periods='all', again=F
       If False, by definition of the routine, drawn to global namespace.
     - sav (bool - default True): if True, by definition of the routine, saves the file in dp/routinesMemory.
     '''
-    t=trn(dp, unit, sav, verbose, periods, again, enforced_rp, cache_results=False)
+    t=trn(dp, unit, sav, verbose, periods, again, enforced_rp, cache_results=sav, cache_path=cache_path)
     return np.diff(t) if len(t)>1 else None
 
 def inst_cv2(t):
@@ -339,7 +339,7 @@ def mfr(dp=None, U=None, exclusion_quantile=0.005, enforced_rp=0,
     U=npa([U]).flatten()
     MFR=[]
     for u in U:
-        t=trn(dp, u, periods=periods, again=again, enforced_rp=enforced_rp, cache_results=False)
+        t=trn(dp, u, periods=periods, again=again, enforced_rp=enforced_rp, cache_results=False, cache_path=cache_path)
         dp_source = npyx.merger.get_source_dp_u(dp, u)[0]
         fs=read_metadata(dp_source)['highpass']['sampling_rate']
         MFR.append(mean_firing_rate(t, exclusion_quantile, fs))
@@ -578,7 +578,7 @@ def train_quality(dp, unit, period_m=[0,20],
                   use_or_operator = True,
                   violations_ms = 0.8, fp_threshold = 0.05, fn_threshold = 0.05,
                   again = False, save = True, verbose = False, plot_debug = False,
-                  enforced_rp = 0, saveFig=False, saveDir=None, _format='png'):
+                  enforced_rp = 0, saveFig=False, saveDir=None, _format='png', cache_path=None):
     """
     Subselect spike times which meet two criteria:
         low number of 'missed spikes' (false negatives)
@@ -671,10 +671,10 @@ def train_quality(dp, unit, period_m=[0,20],
     
     # Load data
     unit_amp = load_amplitudes(dp, unit, verbose, 'all', again, enforced_rp,
-                               cache_results=save)
+                               cache_results=save, cache_path=cache_path)
     
     unit_train = trn(dp, unit, enforced_rp=enforced_rp,
-                     again=again, verbose=verbose, cache_results=save)/fs
+                     again=again, verbose=verbose, cache_results=save, cache_path=cache_path)/fs
 
     if period_m is None:
         period_m = [0, unit_train[-1]//60]
@@ -861,7 +861,7 @@ def trn_filtered(dp, unit, period_m=[0,20],
                   violations_ms = 0.8, fp_threshold = 0.05, fn_threshold=0.05,
                   use_consecutive = False, consecutive_n_seconds = 180,
                   again = False, save = True, verbose = False, plot_debug = False,
-                  enforced_rp=0, saveFig=False, saveDir=None, _format='pdf'):
+                  enforced_rp=0, saveFig=False, saveDir=None, _format='pdf', cache_path=None):
     """
     Returns spike times (in sample) meeting the false positive and false negative criteria.
     Mainly wrapper of train_quality().
@@ -883,7 +883,7 @@ def trn_filtered(dp, unit, period_m=[0,20],
     {0}
     """
     dp = Path(dp)
-    t = trn(dp,unit, enforced_rp=enforced_rp, again=again, cache_results=save)
+    t = trn(dp,unit, enforced_rp=enforced_rp, again=again, cache_results=save, cache_path=cache_path)
     t_s=t/30000
     good_spikes_m, good_fp_start_end, good_fn_start_end = train_quality(dp, unit, period_m,
                     fp_chunk_span, fp_chunk_size, fn_chunk_span, fn_chunk_size, use_or_operator,

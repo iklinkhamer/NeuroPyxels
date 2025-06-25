@@ -28,7 +28,7 @@ from tqdm.auto import tqdm
 import npyx.corr as corr
 import npyx.datasets as datasets
 from npyx.gl import get_units, load_units_qualities
-from npyx.spk_t import trn, trn_filtered # IK change: old code: from npyx.spk_t import trn, trn_filtered   #Note: from spk_t_IK import trn, trn_filtered
+from npyx.spk_t import trn, trn_filtered, load_amplitudes # IK change: old code: from npyx.spk_t import trn, trn_filtered   #Note: from spk_t_IK import trn, trn_filtered
 from npyx.spk_wvf import wvf_dsmatch, wvf_dsmatch_for_plotting_ik   #IK change: old code: from npyx.spk_wvf import wvf_dsmatch
 
 ale = ast.literal_eval
@@ -137,7 +137,7 @@ def directory_checks(data_path):
         os.remove(os.path.join(data_path, "cluster_cell_types.tsv"))
 
 
-def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative", filter_spikes=True, save_path_fpfn=None): #IK change. old code: prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative"):
+def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative", save=False, cache_path=None, filter_spikes=True, save_path_fpfn=None): #IK change. old code: prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative"):
     waveforms = []
     acgs_3d = []
     bad_units = []
@@ -157,7 +157,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         position=0,
         leave=False,
     ):
-        t = trn(dp, u)
+        t = trn(dp, u, cache_results=save, cache_path=cache_path)
         if len(t) < 100:
             bad_units.append(u)
             continue
@@ -182,6 +182,8 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     fn_threshold=fn_threshold,
                     consecutive_n_seconds=180,
                     again=again,
+                    save=save,
+                    cache_path=cache_path
                 )
             except (IndexError, pd.errors.EmptyDataError, ValueError):
                 t, _ = trn_filtered(
@@ -193,6 +195,8 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     consecutive_n_seconds=180,
                     again=True,
                     enforced_rp=-1,
+                    save=save,
+                    cache_path=cache_path
                 )
             if len(t) < 10:
                 bad_units.append(u)
@@ -212,9 +216,9 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         units_processed.append(u)
 
         try:
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False)
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False, cache_path=cache_path)
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False)
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False, cache_path=cache_path)
         if np.isnan(wvf).any():  # IK change: Added breakpoint
             bad_units.append(u)  # IK change added
             continue  # IK change added
@@ -224,9 +228,9 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             bad_units.append(u) # IK change added
             continue # IK change added
         try:
-            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=again, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=again, plot_debug=False, cache_path=cache_path) # IK change: set plot_debug to true. added wvf IK
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False) # IK change: set plot_debug to true. added wvf IK
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False, cache_path=cache_path) # IK change: set plot_debug to true. added wvf IK
         all_wvf_longer.append(datasets.preprocess_template(wvf_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
         all_wvfs_longer.append(datasets.preprocess_template(wvfs_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
         wvf_longer = np.array(wvf_longer)
@@ -242,17 +246,15 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
 
     # After all units processed, save FP/FN rates if path is given
     if save_path_fpfn is not None:
-        import pickle
-        fpfn_data = {
+        fpfn_df = pd.DataFrame({
             "cluster_id": units_processed,
             "fp_rate": fp_rates,
-            "fn_rate": fn_rates,
-            "bad_units": bad_units,
-        }
-        with open(save_path_fpfn, "wb") as f:
-            pickle.dump(fpfn_data, f)
-        print(f"Saved FP/FN rates for {len(units_processed)} units to {save_path_fpfn}")
-
+            "fn_rate": fn_rates
+        })
+        fpfn_df["bad_unit"] = fpfn_df["cluster_id"].isin(bad_units)
+        fpfn_df[["cluster_id", "fp_rate", "fn_rate", "bad_unit"]].to_csv(
+            os.path.join(save_path_fpfn, "fpfn_rates.tsv"), sep="\t", index=False
+        )
 
     if bad_units:
         print(f"Units {str(bad_units)[1:-1]} were skipped because they had too few good spikes.")
@@ -327,8 +329,8 @@ def prepare_dataset_from_h5(data_path):
     return dataset, dataset_class.h5_ids.tolist()
 
 
-def aux_prepare_dataset(dp, u, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative"):
-    t = trn(dp, u)
+def aux_prepare_dataset(dp, u, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative", cache_path=None):
+    t = trn(dp, u, cache_path=cache_path)
     if len(t) < 100:
         # Bad units
         return [True, [], []]
@@ -344,6 +346,7 @@ def aux_prepare_dataset(dp, u, again=False, fp_threshold=0.05, fn_threshold=0.05
             fn_threshold=fn_threshold,
             consecutive_n_seconds=180,
             again=again,
+            cache_path=cache_path,
         )
     except (IndexError, pd.errors.EmptyDataError, ValueError, pickle.UnpicklingError):
         t, _ = trn_filtered(
@@ -355,15 +358,16 @@ def aux_prepare_dataset(dp, u, again=False, fp_threshold=0.05, fn_threshold=0.05
             consecutive_n_seconds=180,
             again=True,
             enforced_rp=-1,
+            cache_path=cache_path,
         )
     if len(t) < 10:
         # Bad units
         return [True, [], []]
 
     try:
-        wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again)
+        wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, cache_path=cache_path)
     except (IndexError, pd.errors.EmptyDataError, ValueError, pickle.UnpicklingError):
-        wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True)
+        wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, cache_path=cache_path)
     waveforms = datasets.preprocess_template(wvf, peak_sign=peak_sign)
 
     _, acg = corr.crosscorr_vs_firing_rate(t, t, 2000, 1)
@@ -434,11 +438,11 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
 
         if args.parallel:
             prediction_dataset, bad_units = prepare_dataset_from_binary_parallel(
-                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
+                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, save = args.cache_results, cache_path = args.cache_path
             )
         else:
             prediction_dataset, bad_units, wvf_longer, wvfs_longer, wvfs_together = prepare_dataset_from_binary(  #IK change: added wvf_IK
-                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, args.filter_spikes, args.save_path #IK change.  added args.filter_spikes, args.save_path_fpfn
+                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, False, args.cache_path, args.filter_spikes, args.save_path #IK change.  old code: args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
@@ -547,7 +551,10 @@ def run_cell_types_classifier(
     fn_threshold: float = 0.05,
     waveform_peak_sign: str = "negative",
     save_path: str = ".", #IK change: added
+    cache_path: str = ".", #IK change
+    dat_dir: str= ".", #IK change
     filter_spikes: bool = True, #IK change: added
+    cache_results: bool = True, #IK change: added
 ) -> None:
     """
     Predicts the cell types of units in a given dataset using a pre-trained ensemble of classifiers.
@@ -578,7 +585,10 @@ def run_cell_types_classifier(
         fn_threshold=fn_threshold,
         peak_sign=waveform_peak_sign,
         save_path=save_path, #IK change: added
+        cache_path=cache_path, #IK change
+        dat_dir=dat_dir, #IK change
         filter_spikes=filter_spikes, #IK change: added
+        cache_results=cache_results, #IK change: added
     )
 
     assert args.quality in [
