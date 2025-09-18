@@ -31,7 +31,7 @@ from npyx.utils import list_files, npa, read_pyfile, npyx_cacher, is_writable
 
 #%% Load metadata and channel map
 
-def read_metadata(dp):
+def read_metadata(dp, params_path=None, dat_dir=None): #IK change. old code: def read_metadata(dp):
     f'''
     {metadata.__doc__}
 
@@ -47,12 +47,12 @@ def read_metadata(dp):
         for dpx, probe in get_ds_table(dp).loc[:,'dp':'probe'].values:
             meta[probe] = metadata(dpx)
     else:
-        meta = metadata(dp)
+        meta = metadata(dp, params_path, dat_dir) #IK change. old code: meta = metadata(dp)
 
     return meta
 
 
-def metadata(dp):
+def metadata(dp, params_path=None, dat_dir=None): #IK change. old code: def metadata(dp):
     '''
     Read spikeGLX (.ap/lf.meta) or openEphys (.oebin) metadata files
     and returns their contents as dictionnaries.
@@ -131,9 +131,11 @@ def metadata(dp):
         }
 
     # import params.py data
-    params_f = dp/'params.py'
+    if params_path is None: #IK change. added
+        params_path = dp #IK change. added
+    params_f = params_path/'params.py' #IK change. old code: params_f = dp/'params.py'
     if params_f.exists():
-        params=read_pyfile(dp/'params.py')
+        params=read_pyfile(params_path/'params.py') #IK change. old code: params=read_pyfile(dp/'params.py')
 
     # find meta file
     glx_ap_files = list_files(dp, "ap.meta", True)
@@ -194,12 +196,18 @@ def metadata(dp):
             else:
                 meta[filt_key]['n_channels_analysed']=meta[filt_key]['n_channels_binaryfile']
                 meta[filt_key]['datatype']='int16'
-            binary_folder = './continuous/'+meta_oe["continuous"][filt_key_i]['folder_name']
-            binary_file = list_files(dp/binary_folder, "dat", False)
+            if dat_dir is None: #IK change. added this line    
+                binary_folder = './continuous/'+meta_oe["continuous"][filt_key_i]['folder_name']            
+                binary_file = list_files(dp/binary_folder, "dat", False)
+                data_path = dp
+            else: #IK change. added this line       
+                binary_folder = "" #IK change. added this line                
+                binary_file = list_files(dat_dir, "dat", False) #IK change. added this line  
+                data_path = dat_dir
             if any(binary_file):
                 binary_rel_path = binary_folder+binary_file[0]
                 meta[filt_key]['binary_relative_path']=binary_rel_path
-                meta[filt_key]['binary_byte_size']=os.path.getsize(dp/binary_rel_path)
+                meta[filt_key]['binary_byte_size']=os.path.getsize(data_path/binary_rel_path) #IK change. old code: meta[filt_key]['binary_byte_size']=os.path.getsize(dp/binary_rel_path)
                 if filt_key=='highpass' and params_f.exists() and params['dat_path']!=binary_rel_path:
                     #print((f'\033[34;1mWARNING edit dat_path in params.py '
                     #f'so that it matches relative location of high pass filtered binary file: {binary_rel_path}'))
@@ -212,7 +220,7 @@ def metadata(dp):
             else:
                 meta[filt_key]['binary_relative_path']='not_found'
                 meta[filt_key]['binary_byte_size']='unknown'
-                print(f"\033[91;1mWARNING {filt_key} binary file not found at {dp}\033[0m")
+                #IK change. commented this line: print(f"\033[91;1mWARNING {filt_key} binary file not found at {dp}\033[0m")
             meta[filt_key]={**meta[filt_key], **meta_oe["continuous"][filt_key_i]}
         meta["events"]=meta_oe["events"]
         meta["spikes"]=meta_oe["spikes"]
@@ -428,7 +436,7 @@ def get_binary_file_path(dp, filt_suffix='ap', absolute_path=True):
     Wrapper of get_glx_file_path:
     {get_glx_file_path.__doc__}
     '''
-
+        
     if 'continuous' in os.listdir(dp):
         meta = read_metadata(dp)
         if 'ap' in filt_suffix:

@@ -66,7 +66,7 @@ HESSIANS_URL_DICT = {
 C4_MESSAGE = (
     "\n"
     "Welcome to the cerebellar cell type classifier of the Cerebellar Cell types Classification Collaboration (C4)!\n"
-    "\nYou can use this command ('c4' or 'predict_cell_types') to run the C4 classifier on a phy-compatible dataset (find our preprint here: https://www.biorxiv.org/content/10.1101/2024.01.30.577845v1)."
+    "\nYou can use this command ('c4' or 'predict_cell_types') to run the C4 classifier on a phy-compatible dataset (find our preprint here: https://www.biorxiv.org/content/10.1101/2024.01.30.577845v1)."
     "\nTo run the classifier on the phy-compatible dataset in the current working directory, simply run 'c4 -dp .'. To run it on a phy-compatible dataset present elsewhere, run 'c4 -dp path/to/my/dataset'."
     "\nBy default, the classifier will predict the cell types of all the 'good' units of the dataset (as defined in phy by manual curation), and it will not use layer information. To alter this behaviour, see the options below."
     "\n\n"
@@ -138,7 +138,7 @@ def directory_checks(data_path):
         os.remove(os.path.join(data_path, "cluster_cell_types.tsv"))
 
 
-def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative", save=False, cache_path=None, filter_spikes=True, save_path_fpfn=None): #IK change. old code: prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative"):
+def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative", save=False, cache_path=None, filter_spikes=True, save_path_fpfn=None, dat_dir=None, oebin_path=None): #IK change. old code: prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_threshold=0.05, peak_sign="negative"):
     waveforms = []
     acgs_3d = []
     bad_units = []
@@ -158,7 +158,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         position=0,
         leave=False,
     ):
-        t = trn(dp, u, cache_results=save, cache_path=cache_path)
+        t = trn(dp, u, cache_results=save, cache_path=cache_path, oebin_path = oebin_path) #IK change. old code: t = trn(dp, u, cache_results=save, cache_path=cache_path)
         if len(t) < 100:
             bad_units.append(u)
             continue
@@ -188,7 +188,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     consecutive_n_seconds=180,
                     again=again,
                     save=save,
-                    cache_path=cache_path
+                    cache_path=cache_path, oebin_path = oebin_path #IK change. old code: cache_path=cache_path
                 )
             except (IndexError, pd.errors.EmptyDataError, ValueError):
                 t, _, fp_rate, fn_rate = trn_filtered( #IK change. old code: t, _ = trn_filtered(
@@ -201,7 +201,7 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
                     again=True,
                     enforced_rp=-1,
                     save=save,
-                    cache_path=cache_path
+                    cache_path=cache_path, oebin_path = oebin_path #IK change. old code: cache_path=cache_path
                 )
             fp_rates.append(fp_rate) #IK change: added
             fn_rates.append(fn_rate) #IK change: added
@@ -226,9 +226,9 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
         """
 
         try:
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False, cache_path=cache_path)
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False, cache_path=cache_path, dat_dir=dat_dir, oebin_path=oebin_path) #IK change. old code: wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=again, plot_debug=False, cache_path=cache_path)
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False, cache_path=cache_path)
+            wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False, cache_path=cache_path, dat_dir=dat_dir, oebin_path=oebin_path) #IK change. old code: wvf, _, _, _ = wvf_dsmatch(dp, u, t_waveforms=120, again=True, plot_debug=False, cache_path=cache_path)
         if np.isnan(wvf).any():  # IK change: Added breakpoint
             bad_units.append(u)  # IK change added
             continue  # IK change added
@@ -238,9 +238,9 @@ def prepare_dataset_from_binary(dp, units, again=False, fp_threshold=0.05, fn_th
             bad_units.append(u) # IK change added
             continue # IK change added
         try:
-            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=again, plot_debug=False, cache_path=cache_path) # IK change: set plot_debug to true. added wvf IK
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=again, plot_debug=False, cache_path=cache_path, dat_dir=dat_dir, oebin_path=oebin_path) # IK change: set plot_debug to true. added wvf IK
         except (IndexError, pd.errors.EmptyDataError, ValueError):
-            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False, cache_path=cache_path) # IK change: set plot_debug to true. added wvf IK
+            wvf_longer, _, _, _, wvfs_longer = wvf_dsmatch_for_plotting_ik(dp, u, t_waveforms=240, again=True, plot_debug=False, cache_path=cache_path, dat_dir=dat_dir, oebin_path=oebin_path) # IK change: set plot_debug to true. added wvf IK
         all_wvf_longer.append(datasets.preprocess_template(wvf_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
         all_wvfs_longer.append(datasets.preprocess_template(wvfs_longer,peak_sign=peak_sign, clip_size=(1e-3, 3e-3))) #IK change: added this line
         wvf_longer = np.array(wvf_longer)
@@ -452,7 +452,7 @@ def prepare_dataset(args: ArgsNamespace) -> tuple:
             )
         else:
             prediction_dataset, bad_units, wvf_longer, wvfs_longer, wvfs_together = prepare_dataset_from_binary(  #IK change: added wvf_IK
-                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, args.cache_results, args.cache_path, args.filter_spikes, args.save_path #IK change.  old code: args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
+                args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign, args.cache_results, args.cache_path, args.filter_spikes, args.save_path, args.dat_dir, args.oebin_path #IK change.  old code: args.data_path, units, args.again, args.fp_threshold, args.fn_threshold, args.peak_sign
             )
 
         good_units = [u for u in units if u not in bad_units]
@@ -565,6 +565,7 @@ def run_cell_types_classifier(
     dat_path: str = ".", #IK change
     filter_spikes: bool = True, #IK change: added
     cache_results: bool = True, #IK change: added
+    oebin_path: str = ".", #IK change: added
 ) -> None:
     """
     Predicts the cell types of units in a given dataset using a pre-trained ensemble of classifiers.
@@ -599,6 +600,7 @@ def run_cell_types_classifier(
         dat_dir=dat_path, #IK change
         filter_spikes=filter_spikes, #IK change: added
         cache_results=cache_results, #IK change: added
+        oebin_path=oebin_path if oebin_path != "." else data_path #IK change: added
     )
 
     assert args.quality in [
